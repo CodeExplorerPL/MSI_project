@@ -1,50 +1,104 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, Dict
+from enum import Enum
 
 # ==============================================================================
 # 1. STRUKTURY DANYCH (INPUT DLA AGENTA)
 #    Definicje danych zwracanych przez Silnik do Agenta w każdym kroku.
 # ==============================================================================
 
+AmmoDamage = int(25)  # Domyślne obrażenia zadawane przez standardową amunicję
+ReloadTime = float(2.0)  # Domyślny czas przeładowania amunicji w sekundach
+
+class ObstacleData:
+    """Informacje o przeszkodzie na mapie."""
+    def __init__(self,
+                 position: 'Position',
+                 size: 1, # Rozmiar przeszkody (np. promień dla okrągłej przeszkody)
+                 is_destructible: bool, # Typ przeszkody (np. 'WALL' - False, 'TREE' - True)
+                 is_alive: bool = True
+                 ):
+        
+        self.position = position
+        self.size = size
+        self.is_destructible = is_destructible
+        self.is_alive = is_alive
+
 class Position:
     """Reprezentuje pozycję X, Y na mapie."""
     def __init__(self, x: float, y: float):
-        self.x = x
+        self.x = x 
         self.y = y
+
+
+class Direction(Enum):
+    N = "North"
+    S = "South"
+    W = "West"
+    E = "East"
+
+class PowerUpType(Enum):
+    M = {"Name": "Medkit", "Value": 50}     # Przywraca 50 punktów struktury
+    A = {"Name": "Ammo", "Value": 10}       # Dodaje 10 sztuk amunicji
+
+
+
+
 
 class TankStatus:
     """Stan własnego czołgu (statystyki i zasoby)."""
     def __init__(self,
-                 position: Position,
-                 heading: float,  # Kąt, w którym jest zwrócony czołg (w stopniach)
-                 structure_points: float, # Punkty Struktury (HP) 
-                 front_armor: float,      # Pancerz przedni
-                 fuel_level: float,       # Zużywalne paliwo 
-                 ammo_count: Dict[str, int], # Liczba amunicji w podziale na typy (np. {'AP': 10, 'HE': 5}) 
-                 heat_level: float,       # Aktualne przegrzanie działa (0.0 do 1.0) 
-                 is_jammed: bool,         # Czy działo jest zablokowane z powodu przegrzania? 
-                 is_in_stealth: bool      # Czy czołg jest w ukryciu (np. w krzakach)? 
+                 position: Position,                    # Pozycja czołgu na mapie
+                 barrel: float,                         # Kąt lufy (w stopniach od 0 do 360, 0 to N)
+                 heading: Direction,                    # Kierunek czołgu (N, E, S, W)
+                 team: int,                             # Numer drużyny czołgu
+                 vision_range: float = 60.0,            # Zasięg widzenia czołgu ( 60 stopni od kąta lufy)
+                 ammo_count: int = 20,                  # Liczba amunicji dostępnej do strzału
+                 structure_points: float = 100.0,       # Punkty (HP) czołgu
+                 is_loaded: bool = True,                # Czy czołg jest gotowy do strzału
+                 barrel_spin_rate: float = 180.0,       # Prędkość obrotu wieży (stopnie na sekundę)
+                 tank_spin_rate: float = 90.0           # Prędkość obrotu kadłuba (stopnie na sekundę)
+                
                  ):
+        
         self.position = position
+        self.barrel = barrel
         self.heading = heading
         self.structure_points = structure_points
-        self.front_armor = front_armor
-        self.fuel_level = fuel_level
         self.ammo_count = ammo_count
-        self.heat_level = heat_level
-        self.is_jammed = is_jammed
-        self.is_in_stealth = is_in_stealth
+        self.team = team
+        self.is_loaded = is_loaded
+        self.vision_range = vision_range
+        self.barrel_spin_rate = barrel_spin_rate
+        self.tank_spin_rate = tank_spin_rate
+
+class MapInfo:
+    """Informacje o mapie (rozmiar, przeszkody, itp.)."""
+    def __init__(self,
+                 width: 50,
+                 height: 50,
+                 obstacles: List['ObstacleData'],       # Lista przeszkód na mapie
+                 tanks: List['TankStatus'],             # Lista czołgów na mapie
+                 powerups: List['PowerUpData'] = []     # Lista przedmiotów do zebrania
+                 ):
+        
+        self.width = width
+        self.height = height
+        self.obstacles = obstacles
+        self.tanks = tanks
+        self.powerups = powerups
 
 class SensorData:
     """Dane wykryte przez systemy sensoryczne czołgu."""
     def __init__(self,
-                 enemy_tanks: List['EnemyData'], # Lista widocznych wrogów
+                 enemy_tanks: List['EnemyData'],        # Lista widocznych wrogów
                  visible_powerups: List['PowerUpData'], # Widoczne przedmioty do zebrania 
-                 terrain_modifiers: List['TerrainModifier'] # Modyfikatory terenu w zasięgu (np. błoto, asfalt) 
+                 obstacles: List['ObstacleData'] = []   # Widoczne przeszkody
                  ):
+        
         self.enemy_tanks = enemy_tanks
         self.visible_powerups = visible_powerups
-        self.terrain_modifiers = terrain_modifiers
+        self.obstacles = obstacles
 
 class EnemyData:
     """Informacje o widocznym wrogu (dla Agentów to ID i pozycja)."""
@@ -53,31 +107,26 @@ class EnemyData:
                  position: Position,
                  heading: float,
                  distance: float,
-                 # Opcjonalnie: ostatni znany typ amunicji, którym strzelał
+                 team: int
+               
                  ):
+        
         self.enemy_id = enemy_id
         self.position = position
         self.heading = heading
         self.distance = distance
+        self.team = team
 
 class PowerUpData:
     """Informacje o przedmiocie do zebrania (np. Apteczka, Amunicja)."""
     def __init__(self,
-                 item_type: str, # Np. 'MEDKIT', 'AMMO', 'FUEL' 
+                 PowerUpType: PowerUpType, # Np. 'MEDKIT', 'AMMO', 
                  position: Position,
                  ):
-        self.item_type = item_type
+        
         self.position = position
-
-class TerrainModifier:
-    """Informacja o typie terenu w danej pozycji."""
-    def __init__(self,
-                 position: Position,
-                 type: str # Np. 'ASPHALT', 'MUD', 'WATER', 'BUSH' 
-                 ):
-        self.position = position
-        self.type = type
-
+        self.value = PowerUpType.value['Value']
+        self.name = PowerUpType.value['Name']
 
 # ==============================================================================
 # 2. KONTRAKT API (FUNKCJE WYWOŁYWANE PRZEZ AGENTA)
@@ -94,14 +143,15 @@ class IAgentController(ABC):
     def get_action(self,
                    my_tank_status: TankStatus,
                    sensor_data: SensorData,
-                   delta_time: float
+                   delta_time: float 
                    ) -> 'ActionCommand':
+        
         """
         Główna metoda Al, wywoływana przez Silnik w każdym kroku symulacji.
 
         :param my_tank_status: Aktualne statystyki czołgu.
         :param sensor_data: Dane sensoryczne o widocznych wrogach i obiektach.
-        :param delta_time: Czas, jaki upłynął od ostatniej klatki (do obliczeń fizycznych).
+        :param delta_time: Czas, jaki upłynął od ostatniej klatki w sekundach (do obliczeń fizycznych).
         :return: Obiekt zawierający wszystkie decyzje podjęte w danym kroku.
         """
         pass
@@ -117,16 +167,13 @@ class ActionCommand:
     Pojedynczy obiekt zawierający wszystkie polecenia dla Silnika w danej klatce.
     """
     def __init__(self,
-                 forward_backward_force: float = 0.0, # Moc silnika (-1.0 do 1.0)
-                 steering_angle: float = 0.0,       # Pożądany kąt skrętu (np. -10.0 do 10.0 stopni)
-                 turret_rotation_speed: float = 0.0, # Prędkość obrotu wieży (w stopniach/s)
-                 should_fire: bool = False,         # Czy Agent chce strzelić? 
-                 ammo_type_to_use: Optional[str] = None, # Jaki typ amunicji użyć? (np. 'AP', 'HE') 
-                 should_drop_mine: bool = False     # Czy Agent chce podrzucić minę/pułapkę? 
+                 barrel_rotation_angle: float,              # Docelony kąt wieży (w stopniach)
+                 heading_direction: Direction,              # Kierunek jazdy czołgu (N, E, S, W)
+                 should_move: bool = False,                 # Czy Agent chce się ruszyć?
+                 should_fire: bool = False,                 # Czy Agent chce strzelić? 
+
                  ):
-        self.forward_backward_force = forward_backward_force
-        self.steering_angle = steering_angle
-        self.turret_rotation_speed = turret_rotation_speed
+        self.heading_direction = heading_direction
+        self.barrel_rotation_angle = barrel_rotation_angle
         self.should_fire = should_fire
-        self.ammo_type_to_use = ammo_type_to_use
-        self.should_drop_mine = should_drop_mine
+        self.should_move = should_move

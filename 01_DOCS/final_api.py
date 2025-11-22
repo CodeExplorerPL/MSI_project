@@ -7,14 +7,15 @@ from enum import Enum
 #    Definicje danych zwracanych przez Silnik do Agenta w każdym kroku.
 # ==============================================================================
 
-AmmoDamage = int(25)  # Domyślne obrażenia zadawane przez standardową amunicję
-ReloadTime = int(1)   # Domyślny czas przeładowania amunicji w tickach
+# AmmoDamage = int(25)              # Domyślne obrażenia zadawane przez standardową amunicję
+# ReloadTime = int(1)               # Domyślny czas przeładowania amunicji w tickach
+# TankMaxHP = int(100)              # Maksymalne punkty zdrowia czołgu
 
 class ObstacleData:
     """Informacje o przeszkodzie na mapie."""
     def __init__(self,
                  position: 'Position',
-                 size: 1, # Rozmiar przeszkody (np. promień dla okrągłej przeszkody)
+                 size: 1,               # Rozmiar przeszkody
                  is_destructible: bool, # Typ przeszkody (np. 'WALL' - False, 'TREE' - True)
                  is_alive: bool = True
                  ):
@@ -39,25 +40,24 @@ class Direction(Enum): # Obrót możliwy tylko o 90 stopni
     
 
 class PowerUpType(Enum):
-    M = {"Name": "Medkit", "Value": 50}     # Przywraca 50 punktów struktury
+    M = {"Name": "Medkit", "Value": 50}     # Przywraca 50 HP
     A = {"Name": "Ammo", "Value": 10}       # Dodaje 10 sztuk amunicji
-
-
 
 
 
 class TankStatus:
     """Stan własnego czołgu (statystyki i zasoby)."""
     def __init__(self,
+                 id: int,                               # Unikalne ID czołgu
                  position: Position,                    # Pozycja czołgu na mapie
                  barrel: float,                         # Kąt lufy (w stopniach od 0 do 360, 0 to N)
                  heading: Direction,                    # Kierunek czołgu (N, E, S, W)
                  team: int,                             # Numer drużyny czołgu
-                 vision_range: float = 60.0,            # Zasięg widzenia czołgu ( 60 stopni od kąta lufy)
+                 vision_range: float = 60.0,            # Zasięg widzenia czołgu ( 60 stopni od kąta lufy, 120 stopni całkowitego kąta widzenia)
                  ammo_count: int = 20,                  # Liczba amunicji dostępnej do strzału
                  hp: float = 100.0,                     # Punkty (HP) czołgu
                  is_loaded: bool = True,                # Czy czołg jest gotowy do strzału
-                 barrel_spin_rate: float = 180.0,       # Prędkość obrotu wieży (stopnie na sekundę)
+                 barrel_spin_rate: float = 180.0,       # Zakres obrotu wieży (stopnie na tick)
                 
                  ):
         
@@ -70,16 +70,17 @@ class TankStatus:
         self.is_loaded = is_loaded
         self.vision_range = vision_range
         self.barrel_spin_rate = barrel_spin_rate
+        self.id = id
         
 
 class MapInfo:
     """Informacje o mapie (rozmiar, przeszkody, itp.)."""
     def __init__(self,
-                 width: 50,
-                 height: 50,
-                 obstacles: List['ObstacleData'],       # Lista przeszkód na mapie
-                 tanks: List['TankStatus'],             # Lista czołgów na mapie
-                 powerups: List['PowerUpData'] = []     # Lista przedmiotów do zebrania
+                 obstacles: List['ObstacleData'],           # Lista przeszkód na mapie
+                 tanks: List['TankStatus'],                 # Lista czołgów na mapie
+                 powerups: List['PowerUpData'] = [],        # Lista przedmiotów do zebrania
+                 width:int=50,                              # Szerokość mapy
+                 height:int=50,                             # Wysokość mapy
                  ):
         
         self.width = width
@@ -91,7 +92,7 @@ class MapInfo:
 class SensorData:
     """Dane wykryte przez systemy sensoryczne czołgu."""
     def __init__(self,
-                 enemy_tanks: List['EnemyData'],        # Lista widocznych wrogów
+                 enemy_tanks: List['EnemyData'],        # Lista widocznych wrogów/sojuszników
                  visible_powerups: List['PowerUpData'], # Widoczne przedmioty do zebrania 
                  obstacles: List['ObstacleData'] = []   # Widoczne przeszkody
                  ):
@@ -101,13 +102,13 @@ class SensorData:
         self.obstacles = obstacles
 
 class EnemyData:
-    """Informacje o widocznym wrogu (dla Agentów to ID i pozycja)."""
+    """Informacje o widocznym wrogu/sojuszniku (dla Agentów to ID i pozycja)."""
     def __init__(self,
-                 enemy_id: int,
-                 position: Position,
-                 heading: float,
-                 distance: float,
-                 team: int
+                 enemy_id: int,         # Unikalne ID czołgu wroga/sojusznika
+                 position: Position,    # Pozycja wroga/sojusznika na mapie
+                 heading: float,        # Kąt kierunku wroga/sojusznika (w stopniach)
+                 distance: float,       # Odległość od własnego czołgu do wroga/sojusznika
+                 team: int              # Numer drużyny wroga/sojusznika
                
                  ):
         
@@ -120,8 +121,8 @@ class EnemyData:
 class PowerUpData:
     """Informacje o przedmiocie do zebrania (np. Apteczka, Amunicja)."""
     def __init__(self,
-                 PowerUpType: PowerUpType, # Np. 'MEDKIT', 'AMMO', 
-                 position: Position,
+                 PowerUpType: PowerUpType,      # Typ przedmiotu do zebrania (np. 'MEDKIT', 'AMMO')
+                 position: Position,            # Pozycja przedmiotu na mapie
                  ):
         
         self.position = position
@@ -183,13 +184,11 @@ class ActionCommand:
     Pojedynczy obiekt zawierający wszystkie polecenia dla Silnika w danej klatce.
     """
     def __init__(self,
-                 barrel_rotation_angle: float,              # Zmiana kąta wieżyczki (w stopniach)
-                 heading_direction: Direction,              # Zmiana Kierunku jazdy czołgu (N, E, S, W)
-                 should_move: bool = False,                 # Czy Agent chce się ruszyć?
-                 should_fire: bool = False,                 # Czy Agent chce strzelić? 
+                 barrel_rotation_angle: float,                      # Zmiana kąta wieżyczki (w stopniach)
+                 should_fire: bool = False,                         # Czy Agent chce strzelić? 
+                 heading_direction: Optional[Direction] = None,     # Zmiana Kierunku jazdy czołgu (N, E, S, W lub None jeśli bez zmian)
 
                  ):
-        self.heading_direction = heading_direction
         self.barrel_rotation_angle = barrel_rotation_angle
         self.should_fire = should_fire
-        self.should_move = should_move
+        self.heading_direction = heading_direction

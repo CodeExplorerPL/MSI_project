@@ -8,7 +8,7 @@ from enum import Enum
 # ==============================================================================
 
 AmmoDamage = int(25)  # Domyślne obrażenia zadawane przez standardową amunicję
-ReloadTime = float(2.0)  # Domyślny czas przeładowania amunicji w sekundach
+ReloadTime = int(1)   # Domyślny czas przeładowania amunicji w tickach
 
 class ObstacleData:
     """Informacje o przeszkodzie na mapie."""
@@ -31,11 +31,12 @@ class Position:
         self.y = y
 
 
-class Direction(Enum):
+class Direction(Enum): # Obrót możliwy tylko o 90 stopni
     N = "North"
+    E = "East"
     S = "South"
     W = "West"
-    E = "East"
+    
 
 class PowerUpType(Enum):
     M = {"Name": "Medkit", "Value": 50}     # Przywraca 50 punktów struktury
@@ -54,23 +55,22 @@ class TankStatus:
                  team: int,                             # Numer drużyny czołgu
                  vision_range: float = 60.0,            # Zasięg widzenia czołgu ( 60 stopni od kąta lufy)
                  ammo_count: int = 20,                  # Liczba amunicji dostępnej do strzału
-                 structure_points: float = 100.0,       # Punkty (HP) czołgu
+                 hp: float = 100.0,                     # Punkty (HP) czołgu
                  is_loaded: bool = True,                # Czy czołg jest gotowy do strzału
                  barrel_spin_rate: float = 180.0,       # Prędkość obrotu wieży (stopnie na sekundę)
-                 tank_spin_rate: float = 90.0           # Prędkość obrotu kadłuba (stopnie na sekundę)
                 
                  ):
         
         self.position = position
         self.barrel = barrel
         self.heading = heading
-        self.structure_points = structure_points
+        self.hp = hp
         self.ammo_count = ammo_count
         self.team = team
         self.is_loaded = is_loaded
         self.vision_range = vision_range
         self.barrel_spin_rate = barrel_spin_rate
-        self.tank_spin_rate = tank_spin_rate
+        
 
 class MapInfo:
     """Informacje o mapie (rozmiar, przeszkody, itp.)."""
@@ -156,6 +156,22 @@ class IAgentController(ABC):
         """
         pass
 
+    @abstractmethod
+    def destroy(self):
+        """
+        Metoda wywoływana przy niszczeniu Agenta (np. do czyszczenia zasobów).
+        Domyślnie nic nie robi.
+        """
+        pass
+    
+    @abstractmethod
+    def end(self):
+        """
+        Metoda wywoływana na końcu symulacji (np. do podsumowania wyników).
+        Domyślnie nic nie robi.
+        """
+        pass
+
 # ==============================================================================
 # 3. KLASA DECYZYJNA (OUTPUT Z AGENTA DO SILNIKA)
 #    Pojedynczy obiekt, który Agent zwraca, by przekazać wszystkie swoje intencje
@@ -167,8 +183,8 @@ class ActionCommand:
     Pojedynczy obiekt zawierający wszystkie polecenia dla Silnika w danej klatce.
     """
     def __init__(self,
-                 barrel_rotation_angle: float,              # Docelony kąt wieży (w stopniach)
-                 heading_direction: Direction,              # Kierunek jazdy czołgu (N, E, S, W)
+                 barrel_rotation_angle: float,              # Zmiana kąta wieżyczki (w stopniach)
+                 heading_direction: Direction,              # Zmiana Kierunku jazdy czołgu (N, E, S, W)
                  should_move: bool = False,                 # Czy Agent chce się ruszyć?
                  should_fire: bool = False,                 # Czy Agent chce strzelić? 
 

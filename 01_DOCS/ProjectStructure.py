@@ -118,7 +118,7 @@ class Terrain(ABC):
 
 @dataclass
 class Grass(Terrain):
-    """Woda: Spowalnia i zadaje obrażenia."""
+    """Trawa: Brak efektu."""
     terrain_type: Literal["Grass"] = field(default="Grass", init=False)
     movement_speed_modifier: float = 1
     deal_damage: int = 0
@@ -177,7 +177,7 @@ class TankSensorData:
     seen_tanks: List[SeenTank]
     seen_powerups: List[PowerUpData]
     seen_obstacles: List[ObstacleUnion]
-    seen_terrains: List[TerrainUnion]  # Użycie Unii
+    seen_terrains: List[TerrainUnion]
 
 
 # --- CZOŁGI (Tanks) ---
@@ -185,7 +185,7 @@ class TankSensorData:
 class Tank(ABC):
     """Abstrakcyjna klasa bazowa dla wszystkich typów czołgów."""
     id: str
-    team: int  # Rozmiar czołgu
+    team: int
 
     # Statystyki bazowe
     tank_type: str = field(init=False)
@@ -214,12 +214,12 @@ class Tank(ABC):
 @dataclass
 class LightTank(Tank):
     tank_type: Literal["LightTank"] = field(default="LightTank", init=False)
-    hp: int = 80;
-    shield: int = 30;
+    hp: int = 80
+    shield: int = 30
     move_speed: float = 10
-    vision_range: float = 10;
+    vision_range: float = 10
     vision_angle: float = 40
-    barrel_spin_rate: float = 180;
+    barrel_spin_rate: float = 180
     heading_spin_rate: float = 140
 
     def get_base_ammo(self) -> Dict[AmmoType, AmmoSlot]:
@@ -231,12 +231,12 @@ class LightTank(Tank):
 @dataclass
 class HeavyTank(Tank):
     tank_type: Literal["HeavyTank"] = field(default="HeavyTank", init=False)
-    hp: int = 120;
-    shield: int = 80;
+    hp: int = 120
+    shield: int = 80
     move_speed: float = 2
-    vision_range: float = 8;
+    vision_range: float = 8
     vision_angle: float = 60
-    barrel_spin_rate: float = 140;
+    barrel_spin_rate: float = 140
     heading_spin_rate: float = 60
 
     def get_base_ammo(self) -> Dict[AmmoType, AmmoSlot]:
@@ -248,12 +248,12 @@ class HeavyTank(Tank):
 @dataclass
 class Sniper(Tank):
     tank_type: Literal["Sniper"] = field(default="Sniper", init=False)
-    hp: int = 40;
-    shield: int = 30;
+    hp: int = 40
+    shield: int = 30    
     move_speed: float = 5
-    vision_range: float = 25;
+    vision_range: float = 25
     vision_angle: float = 20
-    barrel_spin_rate: float = 200;
+    barrel_spin_rate: float = 200
     heading_spin_rate: float = 90
 
     def get_base_ammo(self) -> Dict[AmmoType, AmmoSlot]:

@@ -205,7 +205,7 @@ class Tank(ABC):
     barrel_angle: float = 0.0
     heading: float = 0.0
     is_overcharged: bool = False
-    size: List[int] = field(default_factory=lambda: [10, 10])
+    size: List[int] = field(default_factory=lambda: [5, 5])
 
     @abstractmethod
     def get_base_ammo(self) -> Dict[AmmoType, AmmoSlot]: pass

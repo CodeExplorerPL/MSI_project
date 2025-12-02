@@ -45,7 +45,7 @@ class PowerUpData:
     """Informacje o przedmiocie do zebrania (np. Apteczka, Amunicja)."""
     position: Position
     powerup_type: PowerUpType
-    size: List[int] = field(default_factory=lambda: [10, 10])
+    size: List[int] = field(default_factory=lambda: [2, 2])
 
     @property
     def value(self) -> int: return self.powerup_type.value['Value']
@@ -168,6 +168,7 @@ class SeenTank:
     heading: float
     barrel_angle: float
     distance: float
+    tank_type: str
     team: int
 
 
@@ -184,24 +185,27 @@ class TankSensorData:
 @dataclass
 class Tank(ABC):
     """Abstrakcyjna klasa bazowa dla wszystkich typów czołgów."""
-    id: str
-    team: int
+    _id: str
+    _team: int
 
     # Statystyki bazowe
-    tank_type: str = field(init=False)
-    vision_angle: float
-    vision_range: float
-    move_speed: float
-    barrel_spin_rate: float
-    heading_spin_rate: float
+    _tank_type: str = field(init=False)
+    _vision_angle: float
+    _vision_range: float
+    move_speed: float # can be from (-top_speed, top_speed)
+    _top_speed: float
+    _barrel_spin_rate: float
+    _heading_spin_rate: float
+    _max_hp: int
+    _max_shield: int
 
     # Dynamiczne statystyki
     hp: int
     shield: int
     position: Position
     ammo: Dict[AmmoType, AmmoSlot]
+    _max_ammo: Dict[AmmoType, int]
     ammo_loaded: Optional[AmmoType] = None
-    reload_cooldown: float = 0.0
     barrel_angle: float = 0.0
     heading: float = 0.0
     is_overcharged: bool = False
@@ -216,11 +220,20 @@ class LightTank(Tank):
     tank_type: Literal["LightTank"] = field(default="LightTank", init=False)
     hp: int = 80
     shield: int = 30
-    move_speed: float = 10
-    vision_range: float = 10
-    vision_angle: float = 40
-    barrel_spin_rate: float = 180
-    heading_spin_rate: float = 140
+    _max_hp: int = hp
+    _max_shield: int = shield
+    _top_speed: float = 10
+    _vision_range: float = 10
+    _vision_angle: float = 40
+    _barrel_spin_rate: float = 180
+    _heading_spin_rate: float = 140
+    _max_ammo: Dict[AmmoType, int] = field(
+        default_factory=lambda: {
+            AmmoType.HEAVY: 1,
+            AmmoType.LIGHT: 15,
+            AmmoType.LONG_DISTANCE: 2
+        }
+    )
 
     def get_base_ammo(self) -> Dict[AmmoType, AmmoSlot]:
         return {AmmoType.HEAVY: AmmoSlot(AmmoType.HEAVY, 1),
@@ -233,28 +246,46 @@ class HeavyTank(Tank):
     tank_type: Literal["HeavyTank"] = field(default="HeavyTank", init=False)
     hp: int = 120
     shield: int = 80
-    move_speed: float = 2
-    vision_range: float = 8
-    vision_angle: float = 60
-    barrel_spin_rate: float = 140
-    heading_spin_rate: float = 60
+    _max_hp: int = hp
+    _max_shield: int = shield
+    _top_speed: float = 2
+    _vision_range: float = 8
+    _vision_angle: float = 60
+    _barrel_spin_rate: float = 140
+    _heading_spin_rate: float = 60
+    _max_ammo: Dict[AmmoType, int] = field(
+        default_factory=lambda: {
+            AmmoType.HEAVY: 5,
+            AmmoType.LIGHT: 10,
+            AmmoType.LONG_DISTANCE: 2
+        }
+    )
 
     def get_base_ammo(self) -> Dict[AmmoType, AmmoSlot]:
         return {AmmoType.HEAVY: AmmoSlot(AmmoType.HEAVY, 5),
-                AmmoType.LIGHT: AmmoSlot(AmmoType.LIGHT, 15),
-                AmmoType.LONG_DISTANCE: AmmoSlot(AmmoType.LONG_DISTANCE, 5)}
+                AmmoType.LIGHT: AmmoSlot(AmmoType.LIGHT, 10),
+                AmmoType.LONG_DISTANCE: AmmoSlot(AmmoType.LONG_DISTANCE, 2)}
 
 
 @dataclass
 class Sniper(Tank):
     tank_type: Literal["Sniper"] = field(default="Sniper", init=False)
     hp: int = 40
-    shield: int = 30    
-    move_speed: float = 5
-    vision_range: float = 25
-    vision_angle: float = 20
-    barrel_spin_rate: float = 200
-    heading_spin_rate: float = 90
+    shield: int = 30
+    _max_hp: int = hp
+    _max_shield: int = shield
+    _top_speed: float = 5
+    _vision_range: float = 25
+    _vision_angle: float = 20
+    _barrel_spin_rate: float = 200
+    _heading_spin_rate: float = 90
+    _max_ammo: Dict[AmmoType, int] = field(
+        default_factory=lambda: {
+            AmmoType.HEAVY: 1,
+            AmmoType.LIGHT: 5,
+            AmmoType.LONG_DISTANCE: 10
+        }
+    )
 
     def get_base_ammo(self) -> Dict[AmmoType, AmmoSlot]:
         return {AmmoType.HEAVY: AmmoSlot(AmmoType.HEAVY, 1),
@@ -284,9 +315,11 @@ class IAgentController(ABC):
     """Abstrakcyjny kontroler."""
 
     @abstractmethod
-    def get_action(self, my_tank_status: TankUnion,
-                   sensor_data: TankSensorData,
-                   delta_time: float) -> 'ActionCommand': pass
+    def get_action(
+            self,
+            my_tank_status: TankUnion,
+            sensor_data: TankSensorData
+    ) -> 'ActionCommand': pass
 
     @abstractmethod
     def destroy(self): pass
@@ -304,6 +337,6 @@ class ActionCommand:
     """Pojedynczy obiekt zawierający wszystkie polecenia dla Silnika w danej klatce."""
     barrel_rotation_angle: float
     heading_rotation_angle: float
-    should_move: bool = False
+    move_speed: float # 0 = not moving
     ammo_to_load: Optional[AmmoType] = None
     should_fire: bool = False

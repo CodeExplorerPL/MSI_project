@@ -237,7 +237,7 @@ class LightTank(Tank):
 
     def get_base_ammo(self) -> Dict[AmmoType, AmmoSlot]:
         return {AmmoType.HEAVY: AmmoSlot(AmmoType.HEAVY, 1),
-                AmmoType.LIGHT: AmmoSlot(AmmoType.LIGHT, 10),
+                AmmoType.LIGHT: AmmoSlot(AmmoType.LIGHT, 15),
                 AmmoType.LONG_DISTANCE: AmmoSlot(AmmoType.LONG_DISTANCE, 2)}
 
 

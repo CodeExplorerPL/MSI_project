@@ -1,0 +1,12 @@
+""" Klasa mapy """
+
+
+# @dataclass
+# class MapInfo:
+#     """Informacje o mapie (rozmiar, przeszkody, itp.)."""
+#     map_seed: str
+#     obstacle_list: List[ObstacleUnion]
+#     powerup_list: List[PowerUpData]
+#     terrain_list: List[TerrainUnion]  # Użycie Unii
+#     all_tanks: List[TankUnion]
+#     size: List[int] = field(default_factory=lambda: [500, 500])

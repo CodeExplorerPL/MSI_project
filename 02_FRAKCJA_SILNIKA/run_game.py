@@ -1,0 +1,1 @@
+""" Glowny plik do uruchomienia silnika """

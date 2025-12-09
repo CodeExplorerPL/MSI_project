@@ -1,27 +1,30 @@
 """ Klasa lekkiego czolgu """
+from __future__ import annotations
+
+from typing import Dict
+
+from base_tank import Tank
+from ..structures import Position, AmmoType, AmmoSlot
 
 
-# @dataclass
-# class LightTank(Tank):
-#     tank_type: Literal["LightTank"] = field(default="LightTank", init=False)
-#     hp: int = 80
-#     shield: int = 30
-#     _max_hp: int = hp
-#     _max_shield: int = shield
-#     _top_speed: float = 10
-#     _vision_range: float = 10
-#     _vision_angle: float = 40
-#     _barrel_spin_rate: float = 180
-#     _heading_spin_rate: float = 140
-#     _max_ammo: Dict[AmmoType, int] = field(
-#         default_factory=lambda: {
-#             AmmoType.HEAVY: 1,
-#             AmmoType.LIGHT: 15,
-#             AmmoType.LONG_DISTANCE: 2
-#         }
-#     )
-#
-#     def get_base_ammo(self) -> Dict[AmmoType, AmmoSlot]:
-#         return {AmmoType.HEAVY: AmmoSlot(AmmoType.HEAVY, 1),
-#                 AmmoType.LIGHT: AmmoSlot(AmmoType.LIGHT, 15),
-#                 AmmoType.LONG_DISTANCE: AmmoSlot(AmmoType.LONG_DISTANCE, 2)}
+class LightTank(Tank):
+    def __init__(self, _id: str, team: int, start_pos: Position):
+        super().__init__(
+            _id=_id,
+            _team=team,
+            _vision_angle=120.0,
+            _vision_range=15.0,
+            _top_speed=8.0,
+            _barrel_spin_rate=180.0,
+            _heading_spin_rate=120.0,
+            _max_hp=80,
+            _max_shield=30,
+        )
+        self.position = start_pos
+        self._tank_type = "LIGHT"
+
+    def get_base_ammo(self) -> Dict[AmmoType, AmmoSlot]:
+        return {
+            AmmoType.LIGHT: AmmoSlot(AmmoType.LIGHT, 20),
+            AmmoType.LONG_DISTANCE: AmmoSlot(AmmoType.LONG_DISTANCE, 5),
+        }

@@ -141,7 +141,7 @@ class PotholeRoad(Terrain):
     """Droga z Dziurami: Spowalnia i zadaje minimalne obrażenia."""
     _terrain_type: Literal["PotholeRoad"] = field(default="PotholeRoad", init=False) # typ terenu
     _movement_speed_modifier: float = 0.95 # modyfikator prędkości ruchu
-    _deal_damage: int = 5 # obrażenia zadawane co tick
+    _deal_damage: int = 1 # obrażenia zadawane co tick
 
 
 @dataclass
@@ -149,7 +149,7 @@ class Water(Terrain):
     """Woda: Spowalnia i zadaje obrażenia."""
     _terrain_type: Literal["Water"] = field(default="Water", init=False) # typ terenu
     _movement_speed_modifier: float = 0.7 # modyfikator prędkości ruchu
-    _deal_damage: int = 10 # obrażenia zadawane co tick
+    _deal_damage: int = 2 # obrażenia zadawane co tick
 
 
 TerrainUnion = Union[Grass, Road, Swamp, PotholeRoad, Water] # Wszystkie typy terenów

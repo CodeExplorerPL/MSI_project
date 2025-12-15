@@ -1,0 +1,92 @@
+Mapa:
+- Rozmiar 500x500
+- Rozne przeszkody
+- Rozny teren
+- 5-10 maps layout number
+
+SYSTEM WSPÓŁRZĘDNYCH (Zgodny z API):
+- (0,0) znajduje się w LEWYM DOLNYM rogu mapy.
+- X rośnie w PRAWO.
+- Y rośnie w GÓRĘ.
+- Kąt 0 stopni to kierunek w górę (Północ).
+- Kąty rosną zgodnie z ruchem wskazówek zegara (90=Wschód, 180=Południe, 270=Zachód).
+- Position obiektów oznacza ich środek geometryczny (Center).
+
+Czolg:
+- Rozmiar 5x5
+- HP + Shield (najpierw obrazenia sa zadawane oslonie do 0, reszta redukuje hp)
+- Rozne AmmoType
+- Rozne rodzaje czolgow (rozne statystkyki: speed, HP, vision range, spin rates)
+- Poruszanie sie (przód/tył), celowanie (niezależne od kadłuba)
+- Vision angle + range (Fog of War)
+- Reload: Każdy strzał blokuje działo na określoną liczbę ticków (zależnie od typu amunicji).
+
+Srodowisko:
+- Przeszkody:
+    To czy przeszkoda blokuje widok jest jednoznacze z
+    tym czy mozna przez nia strzelac.
+    + Wall              (niezniszczalne, blokuje widok)
+    + Tree              (zniszczalne, blokuje widok)
+    + AntiTankSpike     (niezniszczalne, nie blokuje widoku, można przez nie strzelać)
+- Teren:
+    Rozny rodzaj zakresu poruszania sie na danym polu, moze zadawac obrazenia
+    + Grass         (Standard)
+    + Road          (Szybko)
+    + Swamp         (Wolno)
+    + PotholeRoad   (Lekko wolno + małe obrażenia)
+    + Water         (Wolno + duże obrażenia)
+- Fizyka i Kolizje:
+    + Rozne rodzaje amunicji zadaja rozne obrazenia i mają inny zasięg.
+    + Amunicja poza swoim zasiegiem znika i nie zadaje obrazen.
+    + Obrazenia od kolizji (Implementowane przez Silnik):
+        Każdy ruszający się czołg przy kolizji cofa się na pozycję sprzed ruchu (bounce).
+        = Zderzenie czołg vs czołg (jeden stoi, jeden jedzie): Stojący -10 HP, Jadący -25 HP
+        = Zderzenie czołg vs czołg (obaj jadą): Obaj -25 HP
+        = Zderzenie czołgu z drzewem: -10 HP (drzewo jest niszczone)
+        = Zderzenie czołgu z scianą: -25 HP
+
+Powerup'y:
+- Medkit (heal 50 hp)
+- Shield (give 20 shield)
+- Overcharge (next shot deals double dmg)
+- AmmoBox Heavy (refill Heavy ammo)
+- AmmoBox Light (refill Light ammo)
+- AmmoBox LongDistance (refill Sniper ammo)
+
+Zasady gry:
+- TimeLimit: Sugerowany limit np. 1000 ticków (aby uniknąć nieskończonych gier).
+- Win condition: Team annihilation (lub więcej HP po upływie czasu).
+- Rzeczy znikaja po zniszczeniu (Drzewa, PowerUpy po zebraniu).
+- Team size: 5
+- Team count: 2
+- Friendly Fire: ON (można zranić sojusznika).
+- Brak komunikacji pomiedzy czolgami z tej samej druzyny (każdy agent działa niezależnie).
+- Powerup'y pojawiaja sie w losowych Terrain (Grass/Road) nie zajmowanych przez czołg/przeszkodę.
+
+Main game loop (Logika Silnika):
+    1. Setup:
+        - Wybór mapy (seed).
+        - Spawn czołgów (rozstawienie drużyn).
+    
+    2. Initialization Phase:
+        - Silnik tworzy obiekty MapInfo (ukrywając wrogów w liście all_tanks).
+        - Silnik wywołuje metodę: agent.initialize(map_info, my_id, team_id).
+        - Agenci wykonują wstępne obliczenia (np. analiza grafu mapy).
+        
+    3. Game Loop (While one team alive):
+        - Inkrementacja numeru klatki (tick).
+        - Spawnowanie PowerUpów (jeśli tick > 10 i tick % 10 == 0).
+        - Przygotowanie sensor_data dla każdego czołgu (uwzględnienie pola widzenia).
+        - Wysłanie zapytań: action = agent.get_action(status, sensor_data).
+        - Odebranie komend ActionCommand.
+        - Przetworzenie logiki (kolejność):
+            a. Obrót wieżyczek i kadłubów (ograniczone przez spin_rate).
+            b. Zmiana amunicji / Przeładowanie.
+            c. Strzały (tworzenie pocisków) i aktualizacja pozycji istniejących pocisków.
+            d. Detekcja trafień pocisków (obrażenia, niszczenie drzew).
+            e. Ruch czołgów i wykrywanie kolizji (zadawanie obrażeń zderzeniowych).
+            f. Sprawdzenie warunków śmierci (usuwanie czołgów z HP <= 0).
+    
+    4. End game:
+        - Wyświetlenie wyników.
+        - Wywołanie agent.end().

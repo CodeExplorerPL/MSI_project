@@ -2,7 +2,7 @@ Mapa:
 - Rozmiar 500x500
 - Rozne przeszkody
 - Rozny teren
-- 5-10 maps layout number
+- 3 maps layout number
 
 SYSTEM WSPÓŁRZĘDNYCH (Zgodny z API):
 - (0,0) znajduje się w LEWYM DOLNYM rogu mapy.
@@ -18,17 +18,18 @@ Czolg:
 - Rozne AmmoType
 - Rozne rodzaje czolgow (rozne statystkyki: speed, HP, vision range, spin rates)
 - Poruszanie sie (przód/tył), celowanie (niezależne od kadłuba)
-- Vision angle + range (Fog of War)
+- Vision angle - kąt widzenia w stopniach(-_vision_angle do +_vision_angle) -> Fog of War
+- Vision range - zasięg widzenia (odległość) -> Fog of War
 - Reload: Każdy strzał blokuje działo na określoną liczbę ticków (zależnie od typu amunicji).
 
 Srodowisko:
-- Przeszkody:
+- Przeszkody (size: 10x10):
     To czy przeszkoda blokuje widok jest jednoznacze z
     tym czy mozna przez nia strzelac.
     + Wall              (niezniszczalne, blokuje widok)
     + Tree              (zniszczalne, blokuje widok)
     + AntiTankSpike     (niezniszczalne, nie blokuje widoku, można przez nie strzelać)
-- Teren:
+- Tere (size: 10x10):
     Rozny rodzaj zakresu poruszania sie na danym polu, moze zadawac obrazenia
     + Grass         (Standard)
     + Road          (Szybko)
@@ -45,7 +46,7 @@ Srodowisko:
         = Zderzenie czołgu z drzewem: -10 HP (drzewo jest niszczone)
         = Zderzenie czołgu z scianą: -25 HP
 
-Powerup'y:
+Powerup'y (size: 2x2):
 - Medkit (heal 50 hp)
 - Shield (give 20 shield)
 - Overcharge (next shot deals double dmg)
@@ -54,35 +55,32 @@ Powerup'y:
 - AmmoBox LongDistance (refill Sniper ammo)
 
 Zasady gry:
-- TimeLimit: Sugerowany limit np. 1000 ticków (aby uniknąć nieskończonych gier).
-- Win condition: Team annihilation (lub więcej HP po upływie czasu).
+- Win condition: Team annihilation.
 - Rzeczy znikaja po zniszczeniu (Drzewa, PowerUpy po zebraniu).
 - Team size: 5
 - Team count: 2
 - Friendly Fire: ON (można zranić sojusznika).
 - Brak komunikacji pomiedzy czolgami z tej samej druzyny (każdy agent działa niezależnie).
-- Powerup'y pojawiaja sie w losowych Terrain (Grass/Road) nie zajmowanych przez czołg/przeszkodę.
+- Powerup'y pojawiaja sie w losowych Terrain nie zajmowanych przez czołg/przeszkodę.
+- W miejscu zniszczonego drzewa pojawia się trawa.
+- Po 100 000 ticku jest nagła śmierć (-1hp per tick).
 
 Main game loop (Logika Silnika):
     1. Setup:
-        - Wybór mapy (seed).
-        - Spawn czołgów (rozstawienie drużyn).
-    
-    2. Initialization Phase:
-        - Silnik tworzy obiekty MapInfo (ukrywając wrogów w liście all_tanks).
-        - Silnik wywołuje metodę: agent.initialize(map_info, my_id, team_id).
-        - Agenci wykonują wstępne obliczenia (np. analiza grafu mapy).
+        - Wybór mapy (seed) i utworzenie obiektu MapInfo.
+        - Spawn czołgów (losowy dobór typów, rozstawienie drużyn, sojusznicy znajdują się >5 jednostek od siebie, a przeciwnicy >50 jednostek).
         
-    3. Game Loop (While one team alive):
+    2. Game Loop (While enemies_remaining>0):
         - Inkrementacja numeru klatki (tick).
-        - Spawnowanie PowerUpów (jeśli tick > 10 i tick % 10 == 0).
+        - If current_tick>100 000: -1hp per tick dla wszystich czołgów.
+        - Spawnowanie PowerUpów (jeśli tick > 50 i (tick-50) % 20 == 0, max ilość na mapie: 25, oddalone od siebie min 20 jednostek).
         - Przygotowanie sensor_data dla każdego czołgu (uwzględnienie pola widzenia).
-        - Wysłanie zapytań: action = agent.get_action(status, sensor_data).
+        - Wysłanie zapytań: get_action(current_tick, my_tank_status, sensor_data, enemies_remaining).
         - Odebranie komend ActionCommand.
         - Przetworzenie logiki (kolejność):
             a. Obrót wieżyczek i kadłubów (ograniczone przez spin_rate).
             b. Zmiana amunicji / Przeładowanie.
-            c. Strzały (tworzenie pocisków) i aktualizacja pozycji istniejących pocisków.
+            c. Strzały i aktualizacja ilości amunicji w ekwipunku.
             d. Detekcja trafień pocisków (obrażenia, niszczenie drzew).
             e. Ruch czołgów i wykrywanie kolizji (zadawanie obrażeń zderzeniowych).
             f. Sprawdzenie warunków śmierci (usuwanie czołgów z HP <= 0).

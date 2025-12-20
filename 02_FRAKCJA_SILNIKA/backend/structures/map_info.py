@@ -5,8 +5,7 @@ from typing import List
 from .obstacle import ObstacleUnion
 from .powerup import PowerUpData
 from .terrain import TerrainUnion
-from ..tank.base_tank import TankUnion
-
+from ..tank.base_tank import Tank
 
 
 @dataclass
@@ -16,5 +15,5 @@ class MapInfo:
     obstacle_list: List[ObstacleUnion]
     powerup_list: List[PowerUpData]
     terrain_list: List[TerrainUnion]  # Użycie Unii
-    all_tanks: List[TankUnion]
+    all_tanks: List[Tank]
     size: List[int] = field(default_factory=lambda: [500, 500])

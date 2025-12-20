@@ -1,7 +1,6 @@
 """ Inicjalizacja pakietu struktur """
 
 from .map_info import MapInfo
-from .map_loader import MapLoader
 from .obstacle import (
     Obstacle,
     ObstacleType,

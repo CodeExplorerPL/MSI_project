@@ -4,6 +4,7 @@ from enum import Enum
 from typing import List
 from .position import Position
 
+from .position import Position
 
 class PowerUpType(Enum):
     """Definicja typów PowerUp'ów i ich wartości."""

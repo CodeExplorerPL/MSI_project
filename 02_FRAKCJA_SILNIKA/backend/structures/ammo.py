@@ -26,5 +26,5 @@ class AmmoType(Enum):
 @dataclass
 class AmmoSlot:
     """Informacje o danym typie amunicji w ekwipunku czołgu."""
-    ammo_type: AmmoType
+    _ammo_type: AmmoType
     count: int

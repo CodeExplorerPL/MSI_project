@@ -82,14 +82,20 @@ class Tank(ABC):
     # =============================
     #   RUCH I OBRÓT
     # =============================
-    def move(self, dir_x: float, dir_y: float, delta_time: float) -> None:
-        """Ruch w kierunku (dir_x, dir_y) z uwzględnieniem prędkości."""
+    def set_move_speed(self, value: float) -> None:
+        # clamp do [-top_speed, top_speed]
+        self.move_speed = max(-self._top_speed, min(value, self._top_speed))
+
+    def move(self, dir_x: float, dir_y: float, delta_time: float, speed_factor: float = 1.0) -> None:
         length = (dir_x ** 2 + dir_y ** 2) ** 0.5
         if length == 0:
             return
 
-        # clamp prędkości
-        speed = max(-self._top_speed, min(self.move_speed, self._top_speed))
+        # final speed = terrain_factor * desired move_speed
+        raw_speed = self.move_speed * max(0.0, speed_factor)
+
+        # clamp wyniku do [-top_speed, top_speed]
+        speed = max(-self._top_speed, min(raw_speed, self._top_speed))
 
         nx = dir_x / length
         ny = dir_y / length
@@ -158,76 +164,39 @@ class Tank(ABC):
     def id(self) -> str:
         return self._id
 
-    @id.setter
-    def id(self, value: str) -> None:
-        self._id = value
-
     @property
     def team(self) -> int:
         return self._team
 
-    @team.setter
-    def team(self, value: int) -> None:
-        self._team = value
 
     @property
     def tank_type(self) -> str:
         return self._tank_type
 
-    @tank_type.setter
-    def tank_type(self, value: str) -> None:
-        self._tank_type = value
 
     @property
     def vision_angle(self) -> float:
         return self._vision_angle
 
-    @vision_angle.setter
-    def vision_angle(self, value: float) -> None:
-        self._vision_angle = value
 
     @property
     def vision_range(self) -> float:
         return self._vision_range
 
-    @vision_range.setter
-    def vision_range(self, value: float) -> None:
-        self._vision_range = value
 
     @property
     def top_speed(self) -> float:
         return self._top_speed
 
-    @top_speed.setter
-    def top_speed(self, value: float) -> None:
-        if value < 0:
-            value = 0
-        self._top_speed = value
 
     @property
     def max_hp(self) -> int:
         return self._max_hp
 
-    @max_hp.setter
-    def max_hp(self, value: int) -> None:
-        self._max_hp = max(1, value)
-        if self.hp > self._max_hp:
-            self.hp = self._max_hp
-
     @property
     def max_shield(self) -> int:
         return self._max_shield
 
-    @max_shield.setter
-    def max_shield(self, value: int) -> None:
-        self._max_shield = max(0, value)
-        if self.shield > self._max_shield:
-            self.shield = self._max_shield
-
     @property
     def reload_timer(self) -> float:
         return self._reload_timer
-
-    @reload_timer.setter
-    def reload_timer(self, value: float) -> None:
-        self._reload_timer = max(0.0, value)

@@ -1,16 +1,14 @@
-""" Inicjalizacja pakietu struktur """
+"""Moduł structures - zawiera wszystkie klasy strukturalne gry"""
 
-from .map_info import MapInfo
+from .position import Position
 from .obstacle import (
-    Obstacle,
     ObstacleType,
+    Obstacle,
     Wall,
     Tree,
     AntiTankSpike,
     ObstacleUnion
 )
-from .position import Position
-from .powerup import PowerUpData, PowerUpType
 from .terrain import (
     Terrain,
     Grass,
@@ -20,24 +18,25 @@ from .terrain import (
     Water,
     TerrainUnion
 )
+from .powerup import PowerUpType, PowerUpData
+from .map_info import MapInfo
 
 __all__ = [
-    "MapInfo",
-    "MapLoader",
-    "Obstacle",
-    "ObstacleType",
-    "Wall",
-    "Tree",
-    "AntiTankSpike",
-    "ObstacleUnion",
-    "Position",
-    "PowerUpData",
-    "PowerUpType",
-    "Terrain",
-    "Grass",
-    "Road",
-    "Swamp",
-    "PotholeRoad",
-    "Water",
-    "TerrainUnion",
+    'Position',
+    'ObstacleType',
+    'Obstacle',
+    'Wall',
+    'Tree',
+    'AntiTankSpike',
+    'ObstacleUnion',
+    'Terrain',
+    'Grass',
+    'Road',
+    'Swamp',
+    'PotholeRoad',
+    'Water',
+    'TerrainUnion',
+    'PowerUpType',
+    'PowerUpData',
+    'MapInfo',
 ]

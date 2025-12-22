@@ -42,3 +42,7 @@ class PowerUpData:
     @property
     def name(self) -> str:
         return self._powerup_type.value['Name']
+
+    @property
+    def ammo_type(self) -> Union[str, None]:
+        return self.powerup_type.value.get("AmmoType")

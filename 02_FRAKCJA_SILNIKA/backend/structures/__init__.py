@@ -20,6 +20,7 @@ from .terrain import (
 )
 from .powerup import PowerUpType, PowerUpData
 from .map_info import MapInfo
+from .ammo import AmmoType, AmmoSlot
 
 __all__ = [
     'Position',

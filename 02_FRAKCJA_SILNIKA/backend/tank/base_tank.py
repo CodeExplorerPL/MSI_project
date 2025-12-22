@@ -92,10 +92,7 @@ class Tank(ABC):
             return
 
         # final speed = terrain_factor * desired move_speed
-        raw_speed = self.move_speed * max(0.0, speed_factor)
-
-        # clamp wyniku do [-top_speed, top_speed]
-        speed = max(-self._top_speed, min(raw_speed, self._top_speed))
+        speed = self.move_speed * max(0.0, speed_factor)
 
         nx = dir_x / length
         ny = dir_y / length

@@ -1,18 +1,26 @@
-""" Klasa pozycji """
+"""Klasa pozycji"""
+from dataclasses import dataclass
 
 
+@dataclass
 class Position:
     """Reprezentuje pozycję X, Y na mapie."""
-    x: float
-    y: float
-
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-    def __getstate__(self):
-        return self.x, self.y
-
-    def __setstate__(self, state):
-        self.x, self.y = state
+    _x: float
+    _y: float
+    
+    @property
+    def x(self) -> float:
+        return self._x
+    
+    @x.setter
+    def x(self, value: float) -> None:
+        self._x = value
+    
+    @property
+    def y(self) -> float:
+        return self._y
+    
+    @y.setter
+    def y(self, value: float) -> None:
+        self._y = value
 

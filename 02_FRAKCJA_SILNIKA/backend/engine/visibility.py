@@ -5,11 +5,11 @@ Przeszkody póki co nie zasłaniają innych obiektów.
 """
 
 import math
-from typing import List, Optional
+from typing import List
 
 # temporary changed to _01_DOKUMENTACJA to import for type hints
 from _01_DOKUMENTACJA.final_api import (
-    Tank, TankUnion, Position, TankSensorData, SeenTank,
+    TankUnion, Position, TankSensorData, SeenTank,
     ObstacleUnion, TerrainUnion, PowerUpData
 )
 
@@ -33,12 +33,12 @@ def calculate_distance(pos1: Position, pos2: Position) -> float:
 def calculate_angle_to_target(from_pos: Position, to_pos: Position) -> float:
     """
     Oblicza kąt (w stopniach) od pozycji źródłowej do celu.
-    
+
     Args:
         from_pos: Pozycja źródłowa
         to_pos: Pozycja docelowa
-        
-    Returns: 
+
+    Returns:
         Kąt w stopniach (0° = wschód, 90° = północ)
     """
     dx = to_pos.x - from_pos.x
@@ -50,33 +50,29 @@ def calculate_angle_to_target(from_pos: Position, to_pos: Position) -> float:
 
 def is_in_vision_cone(
     tank_heading: float,
-    tank_barrel:  float,
+    tank_barrel: float,
     vision_angle: float,
     angle_to_target: float
 ) -> bool:
     """
     Sprawdza, czy cel znajduje się w stożku widzenia czołgu.
-    
+
     Args:
-        tank_heading:  Kąt kadłuba czołgu (stopnie)
-        tank_barrel:  Kąt lufy względem kadłuba (stopnie)
+        tank_heading: Kąt kadłuba czołgu (stopnie)
+        tank_barrel: Kąt lufy względem kadłuba (stopnie)
         vision_angle: Kąt widzenia czołgu (stopnie)
         angle_to_target: Kąt do celu (stopnie)
-        
+
     Returns:
         True jeśli cel jest w polu widzenia
     """
-    # Całkowity kierunek patrzenia = heading + barrel_angle
     view_direction = normalize_angle(tank_heading + tank_barrel)
-    
-    # Różnica kątowa między kierunkiem patrzenia a celem
     angle_diff = abs(normalize_angle(angle_to_target - view_direction))
-    
-    # Cel jest widoczny jeśli mieści się w połowie kąta widzenia
     return angle_diff <= vision_angle / 2.0
 
+
 def check_visibility(
-    tank:  TankUnion,
+    tank: TankUnion,
     all_tanks: List[TankUnion],
     obstacles: List[ObstacleUnion],
     terrains: List[TerrainUnion],
@@ -84,32 +80,38 @@ def check_visibility(
 ) -> TankSensorData:
     """
     Wykrywa wszystkie obiekty w polu widzenia czołgu.
-    
+
     Args:
         tank: Czołg obserwujący
         all_tanks: Lista wszystkich czołgów na mapie
         obstacles: Lista przeszkód
         terrains: Lista terenów
         powerups: Lista powerupów
-        
-    Returns: 
+
+    Returns:
         TankSensorData zawierający wszystkie wykryte obiekty
     """
-    seen_tanks:  List[SeenTank] = []
-    seen_powerups:  List[PowerUpData] = []
+    seen_tanks: List[SeenTank] = []
+    seen_powerups: List[PowerUpData] = []
     seen_obstacles: List[ObstacleUnion] = []
-    seen_terrains:  List[TerrainUnion] = []
-    
-    for other_tank in all_tanks: 
-        
+    seen_terrains: List[TerrainUnion] = []
+
+    origin = tank.position
+
+    # =========================
+    # CZOŁGI
+    # =========================
+    for other_tank in all_tanks:
         if other_tank._id == tank._id:
             continue
-        
-        distance = calculate_distance(tank.position, other_tank.position)
+        if other_tank.hp <= 0:
+            continue
+
+        distance = calculate_distance(origin, other_tank.position)
         if distance > tank._vision_range:
             continue
-        
-        angle_to_target = calculate_angle_to_target(tank.position, other_tank.position)
+
+        angle_to_target = calculate_angle_to_target(origin, other_tank.position)
         if not is_in_vision_cone(
             tank.heading,
             tank.barrel_angle,
@@ -117,71 +119,74 @@ def check_visibility(
             angle_to_target
         ):
             continue
-        
-        seen_tanks.append(SeenTank(
-            id=other_tank._id,
-            position=other_tank.position,
-            heading=other_tank.heading,
-            barrel_angle=other_tank.barrel_angle,
-            distance=distance,
-            tank_type=other_tank._tank_type,
-            team=other_tank._team
-        ))
-    
-    
+
+        seen_tanks.append(
+            SeenTank(
+                _id=other_tank._id,
+                _team=other_tank._team,
+                _tank_type=other_tank._tank_type,
+                position=other_tank.position,
+                is_damaged=other_tank.hp < 0.3 * other_tank._max_hp,
+                heading=other_tank.heading,
+                barrel_angle=other_tank.barrel_angle,
+                distance=distance
+            )
+        )
+
+    # =========================
+    # POWERUPY
+    # =========================
     for powerup in powerups:
-        distance = calculate_distance(tank.position, powerup.position)
+        distance = calculate_distance(origin, powerup._position)
         if distance > tank._vision_range:
             continue
-        
-        angle_to_target = calculate_angle_to_target(tank.position, powerup.position)
-        if not is_in_vision_cone(
+
+        angle_to_target = calculate_angle_to_target(origin, powerup._position)
+        if is_in_vision_cone(
             tank.heading,
             tank.barrel_angle,
             tank._vision_angle,
             angle_to_target
         ):
-            continue
-        
-        seen_powerups.append(powerup)
-        
-    
-    for obstacle in obstacles: 
+            seen_powerups.append(powerup)
+
+    # =========================
+    # PRZESZKODY
+    # =========================
+    for obstacle in obstacles:
         if not obstacle.is_alive:
             continue
-        
-        distance = calculate_distance(tank.position, obstacle.position)
+
+        distance = calculate_distance(origin, obstacle._position)
         if distance > tank._vision_range:
             continue
-        
-        angle_to_target = calculate_angle_to_target(tank.position, obstacle.position)
-        if not is_in_vision_cone(
+
+        angle_to_target = calculate_angle_to_target(origin, obstacle._position)
+        if is_in_vision_cone(
             tank.heading,
             tank.barrel_angle,
             tank._vision_angle,
             angle_to_target
         ):
-            continue
-        
-        seen_obstacles.append(obstacle)
-        
-    
+            seen_obstacles.append(obstacle)
+
+    # =========================
+    # TERENY
+    # =========================
     for terrain in terrains:
-        distance = calculate_distance(tank.position, terrain.position)
+        distance = calculate_distance(origin, terrain._position)
         if distance > tank._vision_range:
             continue
-        
-        angle_to_target = calculate_angle_to_target(tank.position, terrain.position)
-        if not is_in_vision_cone(
+
+        angle_to_target = calculate_angle_to_target(origin, terrain._position)
+        if is_in_vision_cone(
             tank.heading,
             tank.barrel_angle,
             tank._vision_angle,
             angle_to_target
         ):
-            continue
-        
-        seen_terrains.append(terrain)
-    
+            seen_terrains.append(terrain)
+
     return TankSensorData(
         seen_tanks=seen_tanks,
         seen_powerups=seen_powerups,

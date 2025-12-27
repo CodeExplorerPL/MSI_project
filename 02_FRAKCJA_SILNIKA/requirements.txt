@@ -1,0 +1,38 @@
+# Tank Battle Game Engine Requirements
+# Core dependencies for the MSI Tank Battle Game Engine
+
+# Game engine and graphics
+pygame>=2.5.0
+arcade>=2.6.0
+
+# Numerical and scientific computing
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Data handling and configuration
+dataclasses-json>=0.5.0
+pydantic>=1.10.0
+
+# Performance and optimization
+numba>=0.56.0
+
+# Logging and monitoring
+colorlog>=6.7.0
+
+# Development and testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.0.0
+
+# Optional dependencies for enhanced features
+# Uncomment if needed
+# matplotlib>=3.6.0  # For performance plotting
+# pillow>=9.0.0      # For image processing
+# psutil>=5.9.0      # For system monitoring
+# tqdm>=4.64.0       # For progress bars
+
+# Development tools (optional)
+# jupyterlab>=3.6.0  # For analysis notebooks
+# ipython>=8.0.0     # Enhanced Python shell

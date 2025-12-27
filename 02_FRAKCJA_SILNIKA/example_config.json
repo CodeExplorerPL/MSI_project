@@ -1,0 +1,181 @@
+{
+  "map_config": {
+    "width": 500,
+    "height": 500,
+    "available_layouts": 3,
+    "obstacle_size": [10, 10],
+    "terrain_size": [10, 10],
+    "powerup_size": [2, 2]
+  },
+  "tank_config": {
+    "size": [5, 5],
+    "team_size": 5,
+    "team_count": 2,
+    "tank_stats": {
+      "light": {
+        "max_hp": 80,
+        "max_shield": 30,
+        "top_speed": 3.0,
+        "vision_range": 80,
+        "vision_angle": 45,
+        "barrel_spin_rate": 10.0,
+        "heading_spin_rate": 8.0,
+        "base_ammo": {
+          "light": 30,
+          "heavy": 5,
+          "long_distance": 3
+        }
+      },
+      "heavy": {
+        "max_hp": 120,
+        "max_shield": 50,
+        "top_speed": 2.0,
+        "vision_range": 70,
+        "vision_angle": 30,
+        "barrel_spin_rate": 6.0,
+        "heading_spin_rate": 5.0,
+        "base_ammo": {
+          "heavy": 15,
+          "light": 10,
+          "long_distance": 5
+        }
+      },
+      "sniper": {
+        "max_hp": 100,
+        "max_shield": 20,
+        "top_speed": 2.5,
+        "vision_range": 120,
+        "vision_angle": 60,
+        "barrel_spin_rate": 8.0,
+        "heading_spin_rate": 6.0,
+        "base_ammo": {
+          "long_distance": 20,
+          "light": 15,
+          "heavy": 3
+        }
+      }
+    }
+  },
+  "powerup_config": {
+    "spawn_start_tick": 50,
+    "spawn_interval": 20,
+    "max_powerups_on_map": 25,
+    "min_distance_between_powerups": 20.0,
+    "despawn_time": 1000
+  },
+  "physics_config": {
+    "collision_damage": {
+      "tank_vs_stationary_tank": {
+        "moving": -25,
+        "stationary": -10
+      },
+      "tank_vs_moving_tank": {
+        "both": -25
+      },
+      "tank_vs_tree": {
+        "tank": -10
+      },
+      "tank_vs_wall": {
+        "tank": -25
+      }
+    }
+  },
+  "game_rules": {
+    "friendly_fire": true,
+    "sudden_death_tick": 100000,
+    "sudden_death_damage_per_tick": -1,
+    "win_condition": "team_annihilation",
+    "ally_min_distance": 5.0,
+    "enemy_min_distance": 50.0
+  },
+  "coordinate_system": {
+    "origin": "bottom_left",
+    "x_direction": "right",
+    "y_direction": "up",
+    "angle_zero": "north",
+    "angle_direction": "clockwise",
+    "position_reference": "center"
+  },
+  "debug_mode": false,
+  "log_level": "INFO",
+  "save_game_replay": true,
+  "ammo_types": {
+    "heavy": {
+      "damage": -40,
+      "range": 5,
+      "reload_time": 2
+    },
+    "light": {
+      "damage": -20,
+      "range": 10,
+      "reload_time": 1
+    },
+    "long_distance": {
+      "damage": -25,
+      "range": 20,
+      "reload_time": 2
+    }
+  },
+  "terrain_types": {
+    "grass": {
+      "speed_modifier": 1.0,
+      "damage_per_tick": 0
+    },
+    "road": {
+      "speed_modifier": 1.5,
+      "damage_per_tick": 0
+    },
+    "swamp": {
+      "speed_modifier": 0.5,
+      "damage_per_tick": 0
+    },
+    "pothole_road": {
+      "speed_modifier": 0.8,
+      "damage_per_tick": -1
+    },
+    "water": {
+      "speed_modifier": 0.3,
+      "damage_per_tick": -5
+    }
+  },
+  "obstacle_types": {
+    "wall": {
+      "destructible": false,
+      "blocks_vision": true,
+      "blocks_shooting": true
+    },
+    "tree": {
+      "destructible": true,
+      "blocks_vision": true,
+      "blocks_shooting": true
+    },
+    "anti_tank_spike": {
+      "destructible": false,
+      "blocks_vision": false,
+      "blocks_shooting": false
+    }
+  },
+  "powerup_types": {
+    "medkit": {
+      "heal_hp": 50
+    },
+    "shield": {
+      "shield_boost": 20
+    },
+    "overcharge": {
+      "double_damage": true
+    },
+    "ammo_box_heavy": {
+      "ammo_type": "heavy",
+      "refill_amount": 10
+    },
+    "ammo_box_light": {
+      "ammo_type": "light",
+      "refill_amount": 20
+    },
+    "ammo_box_long_distance": {
+      "ammo_type": "long_distance",
+      "refill_amount": 5
+    }
+  }
+}

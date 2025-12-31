@@ -8,7 +8,7 @@ from typing import Any, Dict
 from pydantic import TypeAdapter
 
 from api import (
-    ActionCommand, TankUnion, TankSensorData, Tank, get_active_agent
+    ActionCommand, TankUnion, TankSensorData, get_active_agent
 )
 
 # Adaptery Pydantic do parsowania złożonych typów Union z JSON

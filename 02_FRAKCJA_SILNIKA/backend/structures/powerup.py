@@ -1,9 +1,7 @@
 """Klasa powerupu"""
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List
-from .position import Position
-
+from typing import List, Union
 from .position import Position
 
 class PowerUpType(Enum):

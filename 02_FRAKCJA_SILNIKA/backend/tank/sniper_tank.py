@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Dict
-from base_tank import Tank
+from .base_tank import Tank
 from ..structures import Position, AmmoType, AmmoSlot
 
 class SniperTank(Tank):

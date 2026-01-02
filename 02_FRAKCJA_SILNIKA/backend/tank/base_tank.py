@@ -28,7 +28,7 @@ class Tank(ABC):
     move_speed: float = 0.0  # (-top_speed, top_speed)
     hp: int = field(init=False)
     shield: int = field(init=False)
-    position: Position = field(default_factory=Position)
+    position: Position = field(default_factory=lambda: Position(0.0, 0.0))
     ammo: Dict[AmmoType, AmmoSlot] = field(default_factory=dict)
     _max_ammo: Dict[AmmoType, int] = field(default_factory=dict)
     ammo_loaded: Optional[AmmoType] = None

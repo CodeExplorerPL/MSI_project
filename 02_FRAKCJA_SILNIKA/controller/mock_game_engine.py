@@ -106,6 +106,13 @@ def create_dummy_payload():
     
     return sanitize_for_json(payload)
 
+def create_end_payload():
+    """Tworzy przykładowy payload dla endpointu /end."""
+    return {
+        "damage_dealt": round(random.uniform(0, 5000), 2),
+        "tanks_killed": random.randint(0, 5)
+    }
+
 def run_mock_engine(agent_urls=None):
     if agent_urls is None:
         agent_urls = [
@@ -115,7 +122,14 @@ def run_mock_engine(agent_urls=None):
     print(f"Generowanie danych symulacyjnych dla {len(agent_urls)} agentów...")
 
     for i, url in enumerate(agent_urls):
-        print(f"\n--- TURA DLA CZOŁGU {i+1} ({url}) ---")
+        print(f"\n--- SYMULACJA DLA AGENTA {i+1} ({url}) ---")
+        
+        # Zakładamy, że URL to endpoint /action, więc ucinamy go, aby uzyskać bazę
+        # np. http://localhost:8000/agent/action -> http://localhost:8000/agent
+        base_url = url.rsplit('/', 1)[0]
+
+        # 1. TEST ACTION
+        print(f"\n[1] TEST ENDPOINTU /action")
         json_payload = create_dummy_payload()
         
         print(f"📤 GAME ENGINE SENDING REQUEST...")
@@ -129,6 +143,26 @@ def run_mock_engine(agent_urls=None):
         except requests.exceptions.RequestException as e:
             print(f"❌ Error sending request to {url}: {e}")
             print("   (Czy na pewno uruchomiłeś serwer agenta na tym porcie?)")
+            continue
+
+        # 2. TEST DESTROY
+        print(f"\n[2] TEST ENDPOINTU /destroy")
+        destroy_url = f"{base_url}/destroy"
+        try:
+            requests.post(destroy_url)
+            print(f"✅ Wysłano sygnał zniszczenia do {destroy_url}")
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Błąd przy wysyłaniu destroy: {e}")
+
+        # 3. TEST END
+        print(f"\n[3] TEST ENDPOINTU /end")
+        end_url = f"{base_url}/end"
+        end_payload = create_end_payload()
+        try:
+            requests.post(end_url, json=end_payload)
+            print(f"✅ Wysłano sygnał końca gry do {end_url} z wynikiem: {end_payload}")
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Błąd przy wysyłaniu end: {e}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Uruchom symulator silnika gry.")

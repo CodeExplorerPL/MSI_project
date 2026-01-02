@@ -8,7 +8,7 @@ from typing import Any, Dict
 from pydantic import TypeAdapter
 
 from api import (
-    ActionCommand, TankUnion, TankSensorData, get_active_agent
+    ActionCommand, TankUnion, TankSensorData, get_active_agent, Scoreboard
 )
 
 # Adaptery Pydantic do parsowania złożonych typów Union z JSON
@@ -59,6 +59,16 @@ async def destroy_endpoint():
     get_active_agent().destroy()
 
 @router.post("/end", status_code=204)
-async def end_endpoint():
+async def end_endpoint(payload: Dict[str, Any] = Body(...)):
     """Endpoint do powiadamiania agenta o zakończeniu gry."""
-    get_active_agent().end()
+    # Logowanie otrzymania sygnału końca gry
+    print("\n" + "="*40)
+    print(f"📥 SERVER RECEIVED END GAME")
+    print(json.dumps(payload, indent=2, default=str))
+    print("="*40 + "\n")
+
+    final_score = Scoreboard(
+        damage_dealt=payload.get('damage_dealt', 0.0),
+        tanks_killed=payload.get('tanks_killed', 0)
+    )
+    get_active_agent().end(final_score)

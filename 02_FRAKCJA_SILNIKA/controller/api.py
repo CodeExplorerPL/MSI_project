@@ -22,6 +22,16 @@ from backend.tank.sensor_data import TankSensorData, SeenTank
 TankUnion = Union[LightTank, HeavyTank, Sniper]
 
 # ==============================================================================
+# STRUKTURY DANYCH
+# ==============================================================================
+
+@dataclass
+class Scoreboard:
+    """Struktura przechowująca wynik agenta po zakończeniu gry."""
+    damage_dealt: float
+    tanks_killed: int
+
+# ==============================================================================
 # KONTRAKT API (IAgentController)
 # ==============================================================================
 
@@ -45,7 +55,7 @@ class IAgentController(ABC):
     """Metoda wywoływana, gdy czołg zostaje zniszczony."""
 
     @abstractmethod
-    def end(self): pass
+    def end(self, final_score: Scoreboard): pass
     """Metoda wywoływana raz po zakończeniu symulacji."""
 
 

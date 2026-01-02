@@ -1,6 +1,6 @@
 import random
 from typing import Dict, Any
-from api import IAgentController, ActionCommand
+from api import IAgentController, ActionCommand, Scoreboard
 
 class ExampleAgentController(IAgentController):
     """
@@ -24,8 +24,8 @@ class ExampleAgentController(IAgentController):
     def destroy(self):
         print("Logika Agenta (Example): Otrzymano informację o zniszczeniu.")
 
-    def end(self):
-        print("Logika Agenta (Example): Otrzymano informację o zakończeniu gry.")
+    def end(self, final_score: Scoreboard):
+        print(f"Logika Agenta (Example): Otrzymano informację o zakończeniu gry. Wynik: {final_score}")
 
 # Instancja agenta, która będzie importowana przez routes.py
 agent_controller = ExampleAgentController()

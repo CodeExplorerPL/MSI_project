@@ -13,11 +13,11 @@ backend_path = Path(__file__).parent / "backend"
 sys.path.insert(0, str(backend_path))
 
 from backend.engine.game_loop import run_game
-from backend.utils.config import game_config
+from backend.utils.config import GameConfig, game_config
 from backend.utils.logger import get_logger, set_log_level
 
 
-def load_agent_modules(agent_paths: List[str]) -> List:
+def load_agent_modules(agent_paths: List[str]) -> List[str]:
     """
     Load agent modules from file paths.
 
@@ -114,8 +114,9 @@ Examples:
         config = game_config
 
         if args.config:
-            # TODO: Load custom configuration from JSON file
+            # TODO: Load custom configuration from JSON file when needed
             logger.info(f"Loading custom config from: {args.config}")
+            # For now, use default config
 
         # Modify config based on arguments
         if args.max_ticks:

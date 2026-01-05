@@ -1,21 +1,16 @@
 """
 Game Loop Module - Main game loop implementation
 Główna pętla gry, razem z initem
+Refactored to use existing structures and improve compatibility
 """
 
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-from ..structures.map_info import MapInfo
-from ..structures.position import Position
 from ..tank.base_tank import Tank
-from ..tank.sensor_data import SensorData
-from ..utils.config import PowerUpType, TankType, game_config
+from ..utils.config import TankType
 from ..utils.logger import GameEventType, get_logger
 from .game_core import GameCore, create_default_game
-from .map_loader import MapLoader
-from .physics import PhysicsEngine
-from .visibility import VisibilityEngine
 
 
 class GameLoop:
@@ -33,16 +28,17 @@ class GameLoop:
         self.logger = get_logger()
         self.headless = headless
 
-        # Komponenty silnika
+        # Komponenty silnika - placeholders for future implementation
         self.map_loader = None
         self.physics_engine = None
         self.visibility_engine = None
 
         # Stan gry
-        self.map_info: Optional[MapInfo] = None
+        self.map_info = None
         self.tanks: Dict[str, Tank] = {}
         self.agents: Dict[str, Any] = {}  # Agent controllers
         self.powerups: Dict[str, Any] = {}
+        self.projectiles: List[Any] = []
 
         # Metryki wydajności
         self.tick_start_time = 0.0
@@ -233,7 +229,7 @@ class GameLoop:
         """Inicjalizacja komponentów silnika."""
         self.logger.debug("Initializing game engines...")
 
-        # TODO: Inicjalizacja rzeczywistych komponentów
+        # TODO: Inicjalizacja rzeczywistych komponentów gdy będą dostępne
         # self.physics_engine = PhysicsEngine(self.game_core.config)
         # self.visibility_engine = VisibilityEngine(self.game_core.config)
         # self.map_loader = MapLoader()
@@ -253,17 +249,20 @@ class GameLoop:
         try:
             self.logger.info(f"Loading map with seed: {map_seed}")
 
-            # TODO: Implementacja ładowania mapy
+            # TODO: Implementacja ładowania mapy gdy MapLoader będzie dostępny
             # self.map_info = self.map_loader.load_map(map_seed)
 
             # Tymczasowe - stwórz pustą mapę
             self.map_info = None  # Placeholder
 
-            self.logger.log_game_event(
-                GameEventType.MAP_LOAD,
-                f"Map loaded successfully with seed: {map_seed}",
-                map_seed=map_seed,
-            )
+            try:
+                self.logger.log_game_event(
+                    GameEventType.MAP_LOAD,
+                    f"Map loaded successfully with seed: {map_seed}",
+                    map_seed=map_seed,
+                )
+            except (ImportError, AttributeError):
+                self.logger.info(f"Map loaded successfully with seed: {map_seed}")
 
             return True
 
@@ -307,7 +306,7 @@ class GameLoop:
                             50 + tank_id_counter * 10,
                         )
 
-                    # TODO: Tworzenie rzeczywistego obiektu czołgu
+                    # TODO: Tworzenie rzeczywistego obiektu czołgu gdy klasy będą gotowe
                     # tank = self._create_tank(tank_id, team, tank_type, spawn_pos)
                     # self.tanks[tank_id] = tank
 
@@ -346,7 +345,7 @@ class GameLoop:
             for i, agent_module in enumerate(agent_modules):
                 agent_id = f"agent_{i + 1}"
 
-                # TODO: Implementacja ładowania agentów
+                # TODO: Implementacja ładowania agentów gdy API będzie gotowe
                 # agent_controller = self._load_agent_module(agent_module)
                 # self.agents[agent_id] = agent_controller
 
@@ -361,11 +360,11 @@ class GameLoop:
 
     def _apply_sudden_death_damage(self):
         """Aplikuje obrażenia nagłej śmierci wszystkim czołgom."""
-        damage = self.game_core.get_sudden_death_damage()
+        damage = abs(self.game_core.get_sudden_death_damage())  # Convert to positive
 
         for tank_id, tank in self.tanks.items():
-            # TODO: Aplikacja obrażeń
-            # tank.apply_damage(damage)
+            # TODO: Aplikacja obrażeń gdy Tank.take_damage będzie dostępne
+            # tank.take_damage(damage)
             pass
 
         self.logger.debug(f"Applied sudden death damage: {damage} to all tanks")
@@ -378,7 +377,7 @@ class GameLoop:
         if len(self.powerups) >= powerup_config["max_powerups"]:
             return
 
-        # TODO: Implementacja spawnu power-upów
+        # TODO: Implementacja spawnu power-upów gdy będą gotowe
         # powerup = self._create_random_powerup()
         # self.powerups[powerup.id] = powerup
 
@@ -386,7 +385,7 @@ class GameLoop:
             "powerup_new", "spawn", {"type": "random", "count": len(self.powerups)}
         )
 
-    def _prepare_sensor_data(self) -> Dict[str, SensorData]:
+    def _prepare_sensor_data(self) -> Dict[str, Any]:
         """
         Przygotowanie danych sensorycznych dla każdego czołgu.
 
@@ -396,14 +395,16 @@ class GameLoop:
         sensor_data_map = {}
 
         for tank_id, tank in self.tanks.items():
-            # TODO: Implementacja przygotowania sensor_data
-            # sensor_data = self.visibility_engine.prepare_sensor_data(tank, self.map_info, self.tanks, self.powerups)
+            # TODO: Implementacja przygotowania sensor_data gdy VisibilityEngine będzie gotowy
+            # sensor_data = self.visibility_engine.prepare_sensor_data(
+            #     tank, self.map_info, self.tanks, self.powerups
+            # )
             # sensor_data_map[tank_id] = sensor_data
             pass
 
         return sensor_data_map
 
-    def _query_agents(self, sensor_data_map: Dict[str, SensorData]) -> Dict[str, Any]:
+    def _query_agents(self, sensor_data_map: Dict[str, Any]) -> Dict[str, Any]:
         """
         Wysłanie zapytań do agentów i odebranie odpowiedzi.
 
@@ -414,8 +415,6 @@ class GameLoop:
             Mapa akcji od agentów
         """
         agent_actions = {}
-        current_tick = self.game_core.get_current_tick()
-
         for tank_id, sensor_data in sensor_data_map.items():
             agent_id = self._get_agent_for_tank(tank_id)
             if agent_id not in self.agents:
@@ -427,10 +426,12 @@ class GameLoop:
 
                 self.logger.log_agent_interaction(agent_id, "request", tank_id=tank_id)
 
-                # TODO: Implementacja zapytania do agenta
+                # TODO: Implementacja zapytania do agenta gdy API będzie gotowe
                 # tank_status = self._get_tank_status(tank_id)
                 # enemies_remaining = self._count_enemies(tank_id)
-                # action = self.agents[agent_id].get_action(current_tick, tank_status, sensor_data, enemies_remaining)
+                # action = self.agents[agent_id].get_action(
+                #     current_tick, tank_status, sensor_data, enemies_remaining
+                # )
 
                 response_time = time.time() - request_start
 
@@ -449,30 +450,60 @@ class GameLoop:
     def _process_tank_rotations(self, agent_actions: Dict[str, Any]):
         """Przetworzenie obrotów wieżyczek i kadłubów."""
         for tank_id, action in agent_actions.items():
-            # TODO: Implementacja obrotów
+            # TODO: Implementacja obrotów gdy Tank będzie miał odpowiednie metody
+            # if tank_id in self.tanks:
+            #     tank = self.tanks[tank_id]
+            #     if hasattr(action, 'barrel_rotation'):
+            #         tank.rotate_barrel(action.barrel_rotation, 1.0/60.0)  # Assuming 60 FPS
+            #     if hasattr(action, 'heading_rotation'):
+            #         tank.rotate_heading(action.heading_rotation, 1.0/60.0)
             pass
 
     def _process_ammo_changes(self, agent_actions: Dict[str, Any]):
         """Przetworzenie zmiany amunicji i przeładowania."""
         for tank_id, action in agent_actions.items():
             # TODO: Implementacja zmiany amunicji
+            # if tank_id in self.tanks:
+            #     tank = self.tanks[tank_id]
+            #     if hasattr(action, 'ammo_type'):
+            #         tank.ammo_loaded = action.ammo_type
             pass
 
     def _process_shooting(self, agent_actions: Dict[str, Any]):
         """Przetworzenie strzałów."""
         for tank_id, action in agent_actions.items():
             # TODO: Implementacja strzałów
+            # if tank_id in self.tanks:
+            #     tank = self.tanks[tank_id]
+            #     if hasattr(action, 'shoot') and action.shoot:
+            #         damage = tank.shoot()
+            #         if damage:
+            #             projectile = self._create_projectile(tank, damage)
+            #             self.projectiles.append(projectile)
             pass
 
     def _process_projectile_hits(self):
         """Detekcja trafień pocisków."""
-        # TODO: Implementacja detekcji trafień
+        # TODO: Implementacja detekcji trafień gdy fizyka będzie gotowa
+        # for projectile in self.projectiles[:]:
+        #     hit_target = self.physics_engine.check_projectile_collision(projectile)
+        #     if hit_target:
+        #         hit_target.take_damage(projectile.damage)
+        #         self.projectiles.remove(projectile)
         pass
 
     def _process_tank_movement(self, agent_actions: Dict[str, Any]):
         """Przetworzenie ruchu czołgów i kolizji."""
         for tank_id, action in agent_actions.items():
             # TODO: Implementacja ruchu i kolizji
+            # if tank_id in self.tanks:
+            #     tank = self.tanks[tank_id]
+            #     if hasattr(action, 'move_speed'):
+            #         tank.set_move_speed(action.move_speed)
+            #         # Move tank and check collisions
+            #         collision = self.physics_engine.move_tank_with_collision_check(tank)
+            #         if collision:
+            #             self._handle_collision(tank, collision)
             pass
 
     def _check_death_conditions(self):
@@ -480,8 +511,8 @@ class GameLoop:
         tanks_to_remove = []
 
         for tank_id, tank in self.tanks.items():
-            # TODO: Sprawdzenie HP <= 0
-            # if tank.hp <= 0:
+            # TODO: Sprawdzenie HP <= 0 gdy Tank będzie miał odpowiednie metody
+            # if not tank.is_alive():
             #     tanks_to_remove.append(tank_id)
             #     self.logger.log_tank_action(tank_id, "death", {'final_hp': tank.hp})
             pass
@@ -495,7 +526,7 @@ class GameLoop:
         team_counts = {}
 
         for tank_id, tank in self.tanks.items():
-            # TODO: Pobranie drużyny z czołgu
+            # TODO: Pobranie drużyny z czołgu gdy Tank będzie miał team property
             # team = tank.team
             # team_counts[team] = team_counts.get(team, 0) + 1
             pass
@@ -517,14 +548,14 @@ class GameLoop:
 
     def _count_enemies(self, tank_id: str) -> int:
         """Liczenie wrogich czołgów dla danego czołgu."""
-        # TODO: Implementacja liczenia wrogów
+        # TODO: Implementacja liczenia wrogów gdy Tank będzie miał team property
         return len(self.tanks) - 1
 
     def _cleanup_agents(self):
         """Zakończenie pracy agentów."""
         for agent_id, agent in self.agents.items():
             try:
-                # TODO: Wywołanie agent.end()
+                # TODO: Wywołanie agent.end() gdy API będzie gotowe
                 # agent.end()
                 pass
             except Exception as e:
@@ -535,6 +566,7 @@ class GameLoop:
         self.tanks.clear()
         self.agents.clear()
         self.powerups.clear()
+        self.projectiles.clear()
 
     def _update_performance_metrics(self, tick_duration: float):
         """Aktualizacja metryk wydajności."""
@@ -553,12 +585,13 @@ class GameLoop:
 
     def _generate_performance_report(self):
         """Generowanie raportu wydajności."""
-        report = (
-            self.game_core.game_core.get_performance_report()
-            if hasattr(self.game_core, "get_performance_report")
-            else {}
-        )
-        self.logger.info(f"Performance report: {report}")
+        try:
+            # Try to get performance report from logger if available
+            report = self.logger.get_performance_report()
+            self.logger.info(f"Performance report: {report}")
+        except (AttributeError, Exception):
+            # Fallback to basic performance data
+            self.logger.info(f"Performance data: {self.performance_data}")
 
     def _limit_fps(self, tick_duration: float, target_fps: int = 60):
         """Ograniczenie FPS jeśli potrzebne."""
@@ -569,8 +602,8 @@ class GameLoop:
 
 def run_game(
     config=None,
-    map_seed: str = None,
-    agent_modules: List = None,
+    map_seed: Optional[str] = None,
+    agent_modules: Optional[List] = None,
     headless: bool = False,
 ) -> Dict[str, Any]:
     """

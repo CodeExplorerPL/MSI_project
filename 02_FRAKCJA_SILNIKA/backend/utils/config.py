@@ -1,16 +1,11 @@
-"""Game Configuration Module"""
+"""Game Configuration Module - Refactored to use existing structures"""
 
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Tuple
 
-
-class AmmoType(Enum):
-    """Definicja typów amunicji i ich bazowych właściwości."""
-
-    HEAVY = {"damage": -40, "range": 5, "reload_time": 2}
-    LIGHT = {"damage": -20, "range": 10, "reload_time": 1}
-    LONG_DISTANCE = {"damage": -25, "range": 20, "reload_time": 2}
+# Import existing structures
+from ..structures.ammo import AmmoType
 
 
 class TankType(Enum):
@@ -138,7 +133,7 @@ class PowerUpConfig:
 class PhysicsConfig:
     """Konfiguracja fizyki i kolizji."""
 
-    collision_damage: Dict[str, int] = field(
+    collision_damage: Dict[str, Dict[str, int]] = field(
         default_factory=lambda: {
             "tank_vs_stationary_tank": {"moving": -25, "stationary": -10},
             "tank_vs_moving_tank": {"both": -25},
@@ -233,20 +228,20 @@ class GameConfig:
 game_config = GameConfig()
 
 
-# Helper functions
+# Helper functions using existing AmmoType structure
 def get_ammo_damage(ammo_type: AmmoType) -> int:
     """Pobiera obrażenia dla danego typu amunicji."""
-    return ammo_type.value["damage"]
+    return ammo_type.value_amount
 
 
-def get_ammo_range(ammo_type: AmmoType) -> int:
+def get_ammo_range(ammo_type: AmmoType) -> float:
     """Pobiera zasięg dla danego typu amunicji."""
-    return ammo_type.value["range"]
+    return ammo_type.range
 
 
-def get_ammo_reload_time(ammo_type: AmmoType) -> int:
+def get_ammo_reload_time(ammo_type: AmmoType) -> float:
     """Pobiera czas przeładowania dla danego typu amunicji."""
-    return ammo_type.value["reload_time"]
+    return ammo_type.reload_time
 
 
 def get_terrain_speed_modifier(terrain_type: TerrainType) -> float:

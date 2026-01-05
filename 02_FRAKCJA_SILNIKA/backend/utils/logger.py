@@ -92,7 +92,7 @@ class GameLogger:
             f"game_{self.game_session_id}.log",
             logging.Formatter(
                 "%(asctime)s | %(levelname)-8s | TICK:%(tick)04d | %(message)s",
-                datefmt="%H:%M:%S.%f",
+                datefmt="%H:%M:%S",
             ),
         )
 
@@ -102,7 +102,7 @@ class GameLogger:
             f"events_{self.game_session_id}.log",
             logging.Formatter(
                 "%(asctime)s | %(event_type)-15s | TICK:%(tick)04d | %(message)s",
-                datefmt="%H:%M:%S.%f",
+                datefmt="%H:%M:%S",
             ),
         )
 
@@ -111,7 +111,7 @@ class GameLogger:
             "game_performance",
             f"performance_{self.game_session_id}.log",
             logging.Formatter(
-                "%(asctime)s | %(metric_type)-12s | %(message)s", datefmt="%H:%M:%S.%f"
+                "%(asctime)s | %(metric_type)-12s | %(message)s", datefmt="%H:%M:%S"
             ),
         )
 
@@ -121,7 +121,7 @@ class GameLogger:
             f"errors_{self.game_session_id}.log",
             logging.Formatter(
                 "%(asctime)s | %(levelname)-8s | %(filename)s:%(lineno)d | %(message)s",
-                datefmt="%H:%M:%S.%f",
+                datefmt="%H:%M:%S",
             ),
         )
 

@@ -1,6 +1,7 @@
 """
 Game Core Module - Core game management and configuration
 Zasady gry (Kto z kim, ile, co i jak) ala config
+Refactored to use existing structures
 """
 
 import random
@@ -8,17 +9,12 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-from ..structures.position import Position
 from ..utils.config import (
-    AmmoType,
     GameConfig,
-    ObstacleType,
-    PowerUpType,
     TankType,
-    TerrainType,
     game_config,
 )
-from ..utils.logger import GameLogger, get_logger
+from ..utils.logger import get_logger
 
 
 @dataclass
@@ -161,10 +157,19 @@ class GameCore:
         if self.game_state.current_tick >= self.config.game_rules.sudden_death_tick:
             if not self.game_state.sudden_death_active:
                 self.game_state.sudden_death_active = True
-                self.logger.log_game_event(
-                    self.logger.GameEventType.SUDDEN_DEATH,
-                    f"Sudden death activated at tick {self.game_state.current_tick}",
-                )
+                try:
+                    # Try to use the existing GameEventType from logger
+                    from ..utils.logger import GameEventType
+
+                    self.logger.log_game_event(
+                        GameEventType.SUDDEN_DEATH,
+                        f"Sudden death activated at tick {self.game_state.current_tick}",
+                    )
+                except (ImportError, AttributeError):
+                    # Fallback if GameEventType is not available
+                    self.logger.info(
+                        f"Sudden death activated at tick {self.game_state.current_tick}"
+                    )
             tick_info["sudden_death"] = True
 
         # Sprawdzenie spawnu power-upów

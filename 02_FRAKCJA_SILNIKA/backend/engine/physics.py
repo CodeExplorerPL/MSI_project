@@ -3,15 +3,27 @@ Fizyka gry - Ruch, kolizje, strzały, interakcje z otoczeniem
 """
 
 import math
-from typing import List, Optional, Tuple, Dict
+from typing import Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass
 from enum import Enum
 
-from _01_DOKUMENTACJA.final_api import (
-    TankUnion, Position, MapInfo,
-    ObstacleUnion, TerrainUnion, PowerUpData,
-    AmmoType, PowerUpType, ActionCommand
+from ..structures import (
+    Position,
+    MapInfo,
+    ObstacleUnion,
+    TerrainUnion,
+    PowerUpData,
+    PowerUpType,
+    AmmoType,
+    AmmoSlot,
+    ObstacleType,
 )
+from ..tank.light_tank import LightTank
+from ..tank.heavy_tank import HeavyTank
+from ..tank.sniper_tank import SniperTank
+from controller.api import ActionCommand
+
+TankUnion = Union[LightTank, HeavyTank, SniperTank]
 
 
 # ============================================================
@@ -87,6 +99,13 @@ def rectangles_overlap(
     )
 
 
+def get_tank_size(tank: TankUnion) -> List[int]:
+    """Zwraca rozmiar czołgu niezależnie od nazwy pola w strukturze."""
+    if hasattr(tank, "size"):
+        return tank.size
+    return getattr(tank, "_size", [5, 5])
+
+
 # ============================================================
 # SYSTEM RUCHU
 # ============================================================
@@ -100,7 +119,9 @@ def get_terrain_at_position(
     Zwraca pierwszy teren, którego bounding box zawiera pozycję.
     """
     for terrain in terrains:
-        if rectangles_overlap(position, [1, 1], terrain._position, terrain._size):
+        terrain_position = getattr(terrain, "position", getattr(terrain, "_position", None))
+        terrain_size = getattr(terrain, "size", getattr(terrain, "_size", [1, 1]))
+        if terrain_position and rectangles_overlap(position, [1, 1], terrain_position, terrain_size):
             return terrain
     return None
 
@@ -140,8 +161,11 @@ def move_tank(
     tank.move_speed = speed
 
     terrain = get_terrain_at_position(tank.position, terrains)
-    modifier = terrain._movement_speed_modifier if terrain else 1.0
-    damage = terrain._deal_damage if terrain else 0
+    modifier = 1.0
+    damage = 0
+    if terrain:
+        modifier = getattr(terrain, "movement_speed_modifier", getattr(terrain, "_movement_speed_modifier", 1.0))
+        damage = getattr(terrain, "deal_damage", getattr(terrain, "_deal_damage", 0))
 
     effective_speed = speed * modifier
     heading_rad = math.radians(tank.heading)
@@ -163,7 +187,8 @@ def check_tank_boundary_collision(
     map_size: List[int]
 ) -> bool:
     """Sprawdza, czy czołg wychodzi poza granice mapy."""
-    half_w, half_h = tank._size[0] / 2, tank._size[1] / 2
+    size = get_tank_size(tank)
+    half_w, half_h = size[0] / 2, size[1] / 2
     return (
         tank.position.x - half_w < 0 or
         tank.position.x + half_w > map_size[0] or
@@ -180,7 +205,9 @@ def check_tank_obstacle_collision(
     for obstacle in obstacles:
         if not obstacle.is_alive:
             continue
-        if rectangles_overlap(tank.position, tank._size, obstacle._position, obstacle._size):
+        obstacle_position = getattr(obstacle, "position", getattr(obstacle, "_position", None))
+        obstacle_size = getattr(obstacle, "size", getattr(obstacle, "_size", [0, 0]))
+        if obstacle_position and rectangles_overlap(tank.position, get_tank_size(tank), obstacle_position, obstacle_size):
             return obstacle
     return None
 
@@ -193,8 +220,8 @@ def check_tank_tank_collision(
     if tank1._id == tank2._id:
         return False
     return rectangles_overlap(
-        tank1.position, tank1._size,
-        tank2.position, tank2._size
+        tank1.position, get_tank_size(tank1),
+        tank2.position, get_tank_size(tank2)
     )
 
 
@@ -202,9 +229,8 @@ def check_tank_tank_collision(
 # SYSTEM STRZAŁÓW I RELOADU
 # ============================================================
 
-def update_reload(tank: TankUnion) -> None:
-    if tank.current_reload_progress > 0:
-        tank.current_reload_progress -= 1
+def update_reload(tank: TankUnion, delta_time: float) -> None:
+    tank.update_reload(delta_time)
 
 
 def try_load_ammo(tank: TankUnion, ammo: Optional[AmmoType]) -> None:
@@ -215,15 +241,10 @@ def try_load_ammo(tank: TankUnion, ammo: Optional[AmmoType]) -> None:
     if tank.ammo[ammo].count <= 0:
         return
     tank.ammo_loaded = ammo
-    tank.current_reload_progress = ammo.value["ReloadTime"]
 
 
 def can_fire(tank: TankUnion) -> bool:
-    return (
-        tank.ammo_loaded is not None and
-        tank.current_reload_progress == 0 and
-        tank.ammo[tank.ammo_loaded].count > 0
-    )
+    return tank.can_shoot()
 
 
 def fire_projectile(
@@ -238,17 +259,18 @@ def fire_projectile(
         return None
 
     ammo = tank.ammo_loaded
-    tank.ammo[ammo].count -= 1
-    tank.current_reload_progress = ammo.value["ReloadTime"]
-
-    damage = abs(ammo.value["Value"])
+    damage = tank.shoot()
+    if damage is None:
+        return None
     if tank.is_overcharged:
         damage *= 2
         tank.is_overcharged = False
 
     shoot_direction = normalize_angle(tank.heading + tank.barrel_angle)
 
-    closest_hit_distance = ammo.value["Range"]
+    # Zasięg strzału - pobieramy z enum value dict
+    ammo_range = ammo.value.get("Range", math.inf) if ammo else math.inf
+    closest_hit_distance = ammo_range
     hit = None
 
     for target in all_tanks:
@@ -276,18 +298,25 @@ def fire_projectile(
         if not obstacle.is_alive:
             continue
 
-        dist = calculate_distance(tank.position, obstacle._position)
+        obstacle_pos = getattr(obstacle, "position", getattr(obstacle, "_position", None))
+        if obstacle_pos is None:
+            continue
+
+        dist = calculate_distance(tank.position, obstacle_pos)
         if dist < closest_hit_distance:
             angle = math.degrees(math.atan2(
-                obstacle._position.y - tank.position.y,
-                obstacle._position.x - tank.position.x
+                obstacle_pos.y - tank.position.y,
+                obstacle_pos.x - tank.position.x
             ))
 
             if abs(normalize_angle(angle - shoot_direction)) <= 5:
                 if obstacle.is_destructible:
                     obstacle.is_alive = False
-                    return ProjectileHit(hit_obstacle_id=obstacle._id)
-                return None
+                return ProjectileHit(
+                    hit_obstacle_id=getattr(obstacle, "id", getattr(obstacle, "_id", None)),
+                    damage_dealt=damage,
+                    hit_position=obstacle_pos
+                )
 
     return hit
 
@@ -298,15 +327,8 @@ def fire_projectile(
 
 def apply_damage(tank: TankUnion, damage: int) -> bool:
     """Zadaje obrażenia czołgowi (najpierw shield, potem HP)."""
-    remaining = damage
-
-    if tank.shield > 0:
-        absorbed = min(tank.shield, remaining)
-        tank.shield -= absorbed
-        remaining -= absorbed
-
-    tank.hp -= remaining
-    return tank.hp <= 0
+    tank.take_damage(damage)
+    return not tank.is_alive()
 
 
 # ============================================================
@@ -320,8 +342,8 @@ def check_powerup_pickup(
     """Sprawdza, czy czołg jest na powerupie i może go podnieść."""
     for powerup in powerups:
         if rectangles_overlap(
-            tank.position, tank._size,
-            powerup._position, powerup._size
+            tank.position, get_tank_size(tank),
+            powerup.position, powerup.size
         ):
             return powerup
     return None
@@ -329,23 +351,32 @@ def check_powerup_pickup(
 
 def apply_powerup(tank: TankUnion, powerup: PowerUpData) -> None:
     """Aplikuje efekt powerupu na czołg."""
-    ptype = powerup._powerup_type
+    ptype = powerup.powerup_type
+    value = powerup.value
 
     if ptype == PowerUpType.MEDKIT:
-        tank.hp = min(tank.hp + powerup.value, tank._max_hp)
+        tank.hp = min(tank._max_hp, tank.hp + value)
 
     elif ptype == PowerUpType.SHIELD:
-        tank.shield = min(tank.shield + powerup.value, tank._max_shield)
+        tank.shield = min(tank._max_shield, tank.shield + value)
 
     elif ptype == PowerUpType.OVERCHARGE:
         tank.is_overcharged = True
 
     else:
-        ammo = AmmoType[ptype.value["AmmoType"]]
-        tank.ammo[ammo].count = min(
-            tank.ammo[ammo].count + powerup.value,
-            tank._max_ammo[ammo]
-        )
+        ammo_name = powerup.ammo_type or ptype.value.get("AmmoType")
+        if not ammo_name:
+            return
+        ammo_type = AmmoType[ammo_name]
+        slot = tank.ammo.get(ammo_type)
+        if slot is None:
+            tank.ammo[ammo_type] = AmmoSlot(_ammo_type=ammo_type, count=0)
+            slot = tank.ammo[ammo_type]
+        slot.count += value
+
+        max_ammo = getattr(tank, "_max_ammo", {}).get(ammo_type)
+        if max_ammo:
+            slot.count = min(slot.count, max_ammo)
 
 
 # ============================================================
@@ -370,7 +401,7 @@ def process_physics_tick(
     }
 
     for tank in all_tanks:
-        update_reload(tank)
+        update_reload(tank, delta_time)
 
     for tank in all_tanks:
         if tank.hp <= 0:
@@ -380,8 +411,8 @@ def process_physics_tick(
         if not action:
             continue
 
-        rotate_heading(tank, action.heading_rotation_angle)
-        rotate_barrel(tank, action.barrel_rotation_angle)
+        rotate_heading(tank, action.heading_rotation_angle, delta_time)
+        rotate_barrel(tank, action.barrel_rotation_angle, delta_time)
         try_load_ammo(tank, action.ammo_to_load)
 
     for tank in all_tanks:
@@ -394,7 +425,10 @@ def process_physics_tick(
             if hit:
                 results["projectile_hits"].append(hit)
                 if hit.hit_tank_id:
-                    results["destroyed_tanks"].append(hit.hit_tank_id)
+                    for target in all_tanks:
+                        if target._id == hit.hit_tank_id:
+                            if apply_damage(target, hit.damage_dealt):
+                                results["destroyed_tanks"].append(target._id)
                 if hit.hit_obstacle_id:
                     results["destroyed_obstacles"].append(hit.hit_obstacle_id)
 

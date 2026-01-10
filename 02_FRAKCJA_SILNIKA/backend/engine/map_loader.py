@@ -73,20 +73,17 @@ class MapLoader:
 
         obstacle_list: List[ObstacleUnion] = []
         terrain_list: List[TerrainUnion] = []
-        map_width = 0
-        map_height = 0
+        grid_data: List[List[str]] = []  # Zachowane dla skryptu wizualizacyjnego
 
         with open(map_path, 'r', newline='') as csvfile:
             map_reader = csv.reader(csvfile)
             rows = list(map_reader)
-            map_height = len(rows)
 
             for y, row in enumerate(rows):
-                if y == 0:
-                    map_width = len(row)
-                
+                grid_row = []
                 for x, tile_name in enumerate(row):
                     tile_name = tile_name.strip()
+                    grid_row.append(tile_name)
                     if not tile_name:
                         continue
 
@@ -101,23 +98,30 @@ class MapLoader:
                     pos = Position(pos_x, pos_y)
                     tile_id = str(uuid.uuid4())
 
-                    instance = tile_class(id=tile_id, position=pos)
+                    # Tworzymy instancję z wymaganymi argumentami '_id' i '_position'
+                    instance = tile_class(_id=tile_id, _position=pos)
 
                     if isinstance(instance, Obstacle):
                         obstacle_list.append(instance)
                     elif isinstance(instance, Terrain):
                         terrain_list.append(instance)
+                grid_data.append(grid_row)
 
-        map_total_width = map_width * tile_size
-        map_total_height = map_height * tile_size
+        if not grid_data or not grid_data[0]:
+            raise ValueError("Mapa jest pusta lub ma nieprawidłowy format.")
 
         map_info = MapInfo(
-            map_seed=map_filename,
-            obstacle_list=obstacle_list,
-            terrain_list=terrain_list,
-            powerup_list=[],  # Lista power-upów jest na razie pusta
-            all_tanks=[],     # Lista czołgów jest na razie pusta
-            size=[map_total_width, map_total_height]
+            _map_seed=map_filename,
+            _obstacle_list=obstacle_list,
+            _powerup_list=[],
+            _terrain_list=terrain_list,
+            _all_tanks=[]
         )
+
+        # Dodajemy siatkę jako dodatkowy atrybut, z którego skorzysta scratchpad
+        map_info.grid_data = grid_data
+        map_height_tiles = len(grid_data)
+        map_width_tiles = len(grid_data[0])
+        map_info.grid_dimensions = (map_width_tiles, map_height_tiles)
 
         return map_info

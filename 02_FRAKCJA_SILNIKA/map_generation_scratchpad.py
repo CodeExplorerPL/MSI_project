@@ -6,6 +6,7 @@ i renderowania mapy.
 """
 
 import pygame
+import pygame.math
 import os
 import sys
 from typing import Dict, List
@@ -46,6 +47,14 @@ FALLBACK_MAP_FILENAME = 'map1.csv'  # Używana, gdy GENERATE_NEW_MAP = False
 # WAŻNE: Ścieżka do assetów. Musisz dostosować tę ścieżkę, jeśli masz inną strukturę projektu.
 ASSETS_PATH = os.path.join(current_dir, 'frontend', 'assets', 'tiles')
 BACKGROUND_COLOR = (20, 20, 30) # Ciemnoniebieskie tło
+ROTATION_SPEED = 3 # Prędkość obrotu czołgu w stopniach na klatkę
+TEAM_COLOR = (255, 0, 0) # Czerwony kolor drużyny (prosty do zmiany)
+
+# --- DODANE: Statystyki symulujące silnik fizyki ---
+# Maksymalna prędkość obrotu na klatkę (w stopniach)
+HEADING_SPIN_RATE = 2.5  # Kadłub
+BARREL_SPIN_RATE = 4.0   # Wieżyczka
+
 
 # --- Funkcje pomocnicze ---
 
@@ -74,6 +83,14 @@ def load_tile_assets(tile_names: List[str], asset_path: str, tile_size: int) -> 
             assets[name] = white_tile
             
     return assets
+
+def normalize_angle(angle: float) -> float:
+    """Normalizuje kąt do zakresu [-180, 180]."""
+    while angle > 180:
+        angle -= 360
+    while angle < -180:
+        angle += 360
+    return angle
 
 def main():
     """Główna funkcja programu."""
@@ -121,6 +138,77 @@ def main():
     # --- Wczytywanie Assetów ---
     tile_assets = load_tile_assets(list(TILE_CLASSES.keys()), ASSETS_PATH, TILE_SIZE) # type: ignore
 
+    # --- DODANE: Wczytywanie grafiki czołgu ---
+    tank_image = None
+    colored_mask_image = None
+    turret_image = None
+    colored_turret_mask_image = None
+    pivot_offset = pygame.math.Vector2(0, 0)  # Domyślny pivot, jeśli wczytanie się nie powiedzie
+    try:
+        tank_asset_path = os.path.join(current_dir, 'frontend', 'assets', 'tanks', 'light_tank', 'tnk1.png')
+        raw_tank_image = pygame.image.load(tank_asset_path).convert_alpha()
+        tank_image = pygame.transform.scale(raw_tank_image, (TILE_SIZE, TILE_SIZE))
+        print(f"  [OK] Wczytano asset czołgu: tnk1.png")
+
+        # --- DODANE: Wczytywanie i kolorowanie maski ---
+        mask_asset_path = os.path.join(current_dir, 'frontend', 'assets', 'tanks', 'light_tank', 'msk1.png')
+        raw_mask_image = pygame.image.load(mask_asset_path).convert_alpha()
+        mask_image = pygame.transform.scale(raw_mask_image, (TILE_SIZE, TILE_SIZE))
+
+        # Stwórz warstwę koloru o rozmiarze maski
+        color_layer = pygame.Surface(mask_image.get_size())
+        color_layer.fill(TEAM_COLOR)
+
+        # Nałóż maskę na warstwę koloru w trybie mnożenia (BLEND_RGB_MULT).
+        # Białe piksele maski (wartość 1) przyjmą kolor TEAM_COLOR.
+        # Czarne piksele maski (wartość 0) pozostaną czarne.
+        color_layer.blit(mask_image, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+
+        # Ustaw czarny jako kolor przezroczysty, aby widoczny był tylko pokolorowany wzór.
+        color_layer.set_colorkey((0, 0, 0))
+        colored_mask_image = color_layer
+        print(f"  [OK] Wczytano i pokolorowano maskę: msk1.png")
+
+        # --- DODANE: Wczytywanie grafiki wieżyczki ---
+        turret_asset_path = os.path.join(current_dir, 'frontend', 'assets', 'tanks', 'light_tank', 'tnk2.png')
+        raw_turret_image = pygame.image.load(turret_asset_path).convert_alpha()        
+        original_turret_size = raw_turret_image.get_size()
+        turret_image = pygame.transform.scale(raw_turret_image, (TILE_SIZE, TILE_SIZE))
+        print(f"  [OK] Wczytano asset wieżyczki: tnk2.png")
+
+        # --- DODANE: Wczytywanie i kolorowanie maski wieżyczki ---
+        turret_mask_asset_path = os.path.join(current_dir, 'frontend', 'assets', 'tanks', 'light_tank', 'msk2.png')
+        raw_turret_mask_image = pygame.image.load(turret_mask_asset_path).convert_alpha()
+        turret_mask_image = pygame.transform.scale(raw_turret_mask_image, (TILE_SIZE, TILE_SIZE))
+
+        turret_color_layer = pygame.Surface(turret_mask_image.get_size())
+        turret_color_layer.fill(TEAM_COLOR)
+        turret_color_layer.blit(turret_mask_image, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+        turret_color_layer.set_colorkey((0, 0, 0))
+        colored_turret_mask_image = turret_color_layer
+        print(f"  [OK] Wczytano i pokolorowano maskę wieżyczki: msk2.png")        
+
+        # --- DODANE: Obliczenie pivotu wieżyczki ---
+        # Oryginalny pivot to (65, 48) w obrazku o oryginalnym rozmiarze
+        original_pivot = pygame.math.Vector2(75, 46)
+        scale_factor_x = TILE_SIZE / original_turret_size[0]
+        scale_factor_y = TILE_SIZE / original_turret_size[1]
+        scaled_pivot = pygame.math.Vector2(original_pivot.x * scale_factor_x, original_pivot.y * scale_factor_y)
+
+        # Wektor od środka przeskalowanego obrazka do jego pivotu
+        turret_center_in_surface = pygame.math.Vector2(turret_image.get_rect().center)
+        pivot_offset = scaled_pivot - turret_center_in_surface
+
+    except (pygame.error, FileNotFoundError) as e:
+        print(f"  [!] Ostrzeżenie: Nie udało się wczytać grafiki czołgu lub maski: {e}")
+
+    # Pozycja czołgu na siatce (np. 5 kolumna, 5 wiersz)
+    tank_grid_pos = (5, 5)
+    # --- ZMIENIONE: Zmienne kątów zgodne z silnikiem ---
+    hull_heading = 0.0  # Kąt kadłuba
+    barrel_angle = 0.0  # Kąt lufy (względem kadłuba)
+
+
     # --- Główna Pętla ---
     running = True
     clock = pygame.time.Clock()
@@ -131,6 +219,32 @@ def main():
                 event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
             ):
                 running = False
+
+        # --- ZMIENIONE: Obsługa klawiszy zgodna z logiką silnika (żądanie zmiany kąta) ---
+        heading_delta_request = 0.0
+        barrel_delta_request = 0.0
+
+        # Kadłub: A/D
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_a]:
+            heading_delta_request = ROTATION_SPEED  # Żądanie obrotu w lewo (CCW)
+        if keys[pygame.K_d]:
+            heading_delta_request = -ROTATION_SPEED # Żądanie obrotu w prawo (CW)
+        # Wieżyczka: Strzałki
+        if keys[pygame.K_LEFT]:
+            barrel_delta_request = ROTATION_SPEED   # Żądanie obrotu w lewo (CCW)
+        if keys[pygame.K_RIGHT]:
+            barrel_delta_request = -ROTATION_SPEED  # Żądanie obrotu w prawo (CW)
+
+        # --- DODANE: Symulacja logiki z physics.py ---
+        # Ogranicz żądany obrót do maksymalnej prędkości (spin rate)
+        actual_heading_delta = max(-HEADING_SPIN_RATE, min(heading_delta_request, HEADING_SPIN_RATE))
+        actual_barrel_delta = max(-BARREL_SPIN_RATE, min(barrel_delta_request, BARREL_SPIN_RATE))
+
+        # Zastosuj obrót i znormalizuj kąt
+        hull_heading = normalize_angle(hull_heading + actual_heading_delta)
+        barrel_angle = normalize_angle(barrel_angle + actual_barrel_delta)
+
 
         screen.fill(BACKGROUND_COLOR)
 
@@ -144,6 +258,50 @@ def main():
                 if asset:
                     # Współrzędne rysowania to po prostu indeksy siatki pomnożone przez rozmiar kafelka
                     screen.blit(asset, (x * TILE_SIZE, y * TILE_SIZE))
+
+        # --- DODANE: Rysowanie czołgu na wierzchu mapy ---
+        if tank_image:
+            # Obracamy oryginalny obraz, aby uniknąć utraty jakości
+            rotated_tank = pygame.transform.rotate(tank_image, hull_heading)
+            # Obliczamy nową pozycję, aby obrót odbywał się wokół środka
+            tank_center_x = tank_grid_pos[0] * TILE_SIZE + TILE_SIZE / 2
+            tank_center_y = tank_grid_pos[1] * TILE_SIZE + TILE_SIZE / 2
+            new_rect = rotated_tank.get_rect(center=(tank_center_x, tank_center_y))
+
+            # Najpierw rysujemy bazowy czołg
+            screen.blit(rotated_tank, new_rect.topleft)
+
+            # --- DODANE: Rysowanie pokolorowanej maski ---
+            if colored_mask_image:
+                # Obracamy również maskę
+                rotated_mask = pygame.transform.rotate(colored_mask_image, hull_heading)
+                # Rysujemy ją na tej samej pozycji co czołg, domyślny tryb mieszania nałoży kolor
+                screen.blit(rotated_mask, new_rect.topleft)
+            
+            # --- DODANE: Rysowanie wieżyczki i jej maski ---
+            if turret_image:
+                # --- MODIFIED: Wieżyczka obraca się razem z kadłubem ---
+                final_turret_display_angle = hull_heading + barrel_angle
+
+                # Obracamy wieżyczkę
+                rotated_turret = pygame.transform.rotate(turret_image, final_turret_display_angle)
+                
+                # --- MODIFIED: Obliczenie pozycji z uwzględnieniem pivotu ---
+                # Obracamy wektor od środka do pivotu
+                rotated_offset = pivot_offset.rotate(-final_turret_display_angle)
+                
+                # Nowy środek do blitowania to środek czołgu przesunięty o obrócony wektor
+                blit_center_pos = pygame.math.Vector2(tank_center_x, tank_center_y) - rotated_offset
+                new_turret_rect = rotated_turret.get_rect(center=blit_center_pos)
+
+                # Rysujemy wieżyczkę
+                screen.blit(rotated_turret, new_turret_rect.topleft)
+
+                # Rysowanie pokolorowanej maski wieżyczki
+                if colored_turret_mask_image:
+                    rotated_turret_mask = pygame.transform.rotate(colored_turret_mask_image, final_turret_display_angle)
+                    # Maska ma te same wymiary i pivot, więc używamy tego samego rect
+                    screen.blit(rotated_turret_mask, new_turret_rect.topleft)
 
         pygame.display.flip()
         clock.tick(60)

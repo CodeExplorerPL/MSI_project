@@ -5,13 +5,15 @@ Przeszkody póki co nie zasłaniają innych obiektów.
 """
 
 import math
-from typing import List
+from typing import List, Union
 
-# temporary changed to _01_DOKUMENTACJA to import for type hints
-from _01_DOKUMENTACJA.final_api import (
-    TankUnion, Position, TankSensorData, SeenTank,
-    ObstacleUnion, TerrainUnion, PowerUpData
-)
+from ..structures import Position, ObstacleUnion, TerrainUnion, PowerUpData
+from ..tank.heavy_tank import HeavyTank
+from ..tank.light_tank import LightTank
+from ..tank.sniper_tank import SniperTank
+from ..tank.sensor_data import TankSensorData, SeenTank
+
+TankUnion = Union[LightTank, HeavyTank, SniperTank]
 
 
 def normalize_angle(angle: float) -> float:
@@ -122,9 +124,9 @@ def check_visibility(
 
         seen_tanks.append(
             SeenTank(
-                _id=other_tank._id,
-                _team=other_tank._team,
-                _tank_type=other_tank._tank_type,
+                id=other_tank._id,
+                team=other_tank._team,
+                tank_type=other_tank._tank_type,
                 position=other_tank.position,
                 is_damaged=other_tank.hp < 0.3 * other_tank._max_hp,
                 heading=other_tank.heading,

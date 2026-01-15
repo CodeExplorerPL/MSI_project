@@ -4,6 +4,7 @@ Roboczy skrypt do generowania i wizualizacji mapy.
 Ten plik służy jako "piaskownica" do testowania generowania, wczytywania
 i renderowania mapy.
 """
+import random
 
 import pygame
 import pygame.math
@@ -46,6 +47,15 @@ FALLBACK_MAP_FILENAME = 'map1.csv'  # Używana, gdy GENERATE_NEW_MAP = False
 
 # WAŻNE: Ścieżka do assetów. Musisz dostosować tę ścieżkę, jeśli masz inną strukturę projektu.
 ASSETS_PATH = os.path.join(current_dir, 'frontend', 'assets', 'tiles')
+POWERUPS_ASSETS_PATH = os.path.join(current_dir, 'frontend', 'assets', 'power-ups')
+
+# --- DODANE: Opcje generowania power-upów ---
+POWERUP_TYPES = ['Medkit', 'Shield', 'Overcharge', 'AmmoBox_Heavy', 'AmmoBox_Light', 'AmmoBox_Sniper']
+POWERUP_SIZE = int(TILE_SIZE * 0.75)
+POWERUP_SPAWN_START_TICK = 50
+POWERUP_SPAWN_INTERVAL = 180  # Co 3 sekundy przy 60 FPS
+MAX_POWERUPS_ON_MAP = 10
+
 BACKGROUND_COLOR = (20, 20, 30) # Ciemnoniebieskie tło
 ROTATION_SPEED = 3 # Prędkość obrotu czołgu w stopniach na klatkę
 TEAM_COLOR = (255, 0, 0) # Czerwony kolor drużyny (prosty do zmiany)
@@ -81,6 +91,32 @@ def load_tile_assets(tile_names: List[str], asset_path: str, tile_size: int) -> 
         except (pygame.error, FileNotFoundError):
             print(f"  [!] Ostrzeżenie: Nie znaleziono assetu dla '{name}' w '{file_path}'. Używam białego kafelka.")
             assets[name] = white_tile
+            
+    return assets
+
+def load_powerup_assets(powerup_names: List[str], asset_path: str, size: int) -> Dict[str, pygame.Surface]:
+    """
+    Wczytuje grafiki power-upów z podanej ścieżki.
+    Jeśli grafika nie istnieje, tworzy różowy kwadrat.
+    """
+    print(f"Ładowanie assetów power-upów z: {asset_path}")
+    assets = {}
+    
+    # Domyślny różowy kwadrat na wypadek braku grafiki
+    pink_square = pygame.Surface((size, size))
+    pink_square.fill((255, 0, 255))
+    pink_square.set_colorkey((0, 0, 0)) # Ustawienie czarnego jako przezroczystego
+
+    for name in powerup_names:
+        # Nazwa pliku to nazwa z listy, np. "Medkit.png"
+        file_path = os.path.join(asset_path, f"{name}.png")
+        try:
+            image = pygame.image.load(file_path).convert_alpha()
+            assets[name] = pygame.transform.scale(image, (size, size))
+            print(f"  [OK] Wczytano asset power-upu: {name}.png")
+        except (pygame.error, FileNotFoundError):
+            print(f"  [!] Ostrzeżenie: Nie znaleziono assetu dla '{name}' w '{file_path}'. Używam różowego kwadratu.")
+            assets[name] = pink_square
             
     return assets
 
@@ -137,6 +173,7 @@ def main():
 
     # --- Wczytywanie Assetów ---
     tile_assets = load_tile_assets(list(TILE_CLASSES.keys()), ASSETS_PATH, TILE_SIZE) # type: ignore
+    powerup_assets = load_powerup_assets(POWERUP_TYPES, POWERUPS_ASSETS_PATH, POWERUP_SIZE)
 
     # --- DODANE: Wczytywanie grafiki czołgu ---
     tank_image = None
@@ -208,17 +245,79 @@ def main():
     hull_heading = 0.0  # Kąt kadłuba
     barrel_angle = 0.0  # Kąt lufy (względem kadłuba)
 
+    # --- DODANE: Stan gry dla power-upów ---
+    powerups = []
+    current_tick = 0
 
     # --- Główna Pętla ---
     running = True
     clock = pygame.time.Clock()
-
+    
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT or (
                 event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
             ):
                 running = False
+
+        current_tick += 1
+
+        # --- DODANE: Spawnowanie power-upów ---
+        if len(powerups) < MAX_POWERUPS_ON_MAP and \
+           current_tick > POWERUP_SPAWN_START_TICK and \
+           (current_tick - POWERUP_SPAWN_START_TICK) % POWERUP_SPAWN_INTERVAL == 0:
+            
+            spawn_successful = False
+            for _ in range(50): # 50 prób na znalezienie miejsca
+                # Losowa pozycja na mapie (współrzędne pixelowe)
+                pos_x = random.uniform(POWERUP_SIZE / 2, screen_width - POWERUP_SIZE / 2)
+                pos_y = random.uniform(POWERUP_SIZE / 2, screen_height - POWERUP_SIZE / 2)
+                
+                candidate_rect = pygame.Rect(0, 0, POWERUP_SIZE, POWERUP_SIZE)
+                candidate_rect.center = (pos_x, pos_y)
+
+                # Sprawdź kolizję z przeszkodami
+                collision = False
+                for obstacle in map_info.obstacle_list:
+                    # obstacle.position to środek kafelka
+                    obstacle_rect = pygame.Rect(0, 0, obstacle.size[0], obstacle.size[1])
+                    obstacle_rect.center = (obstacle.position.x, obstacle.position.y)
+                    if candidate_rect.colliderect(obstacle_rect):
+                        collision = True
+                        break
+                if collision: continue
+
+                # Sprawdź kolizję z czołgiem
+                tank_center_x = tank_grid_pos[0] * TILE_SIZE + TILE_SIZE / 2
+                tank_center_y = tank_grid_pos[1] * TILE_SIZE + TILE_SIZE / 2
+                tank_rect = pygame.Rect(0, 0, TILE_SIZE, TILE_SIZE)
+                tank_rect.center = (tank_center_x, tank_center_y)
+                if candidate_rect.colliderect(tank_rect):
+                    continue
+
+                # Sprawdź kolizję z innymi power-upami
+                collision = False
+                for p in powerups:
+                    if candidate_rect.colliderect(p['rect']):
+                        collision = True
+                        break
+                if collision: continue
+
+                # Miejsce jest dobre, tworzymy power-up
+                powerup_type = random.choice(POWERUP_TYPES)
+                powerup_asset = powerup_assets.get(powerup_type)
+                if powerup_asset:
+                    powerups.append({
+                        'type': powerup_type,
+                        'surface': powerup_asset,
+                        'rect': candidate_rect
+                    })
+                    print(f"  [+] Zespawnowano power-up: {powerup_type} na pozycji {candidate_rect.center}")
+                    spawn_successful = True
+                    break # Wyjdź z pętli prób
+            
+            if not spawn_successful:
+                print("  [!] Nie udało się znaleźć miejsca na spawn power-upa.")
 
         # --- ZMIENIONE: Obsługa klawiszy zgodna z logiką silnika (żądanie zmiany kąta) ---
         heading_delta_request = 0.0
@@ -258,6 +357,10 @@ def main():
                 if asset:
                     # Współrzędne rysowania to po prostu indeksy siatki pomnożone przez rozmiar kafelka
                     screen.blit(asset, (x * TILE_SIZE, y * TILE_SIZE))
+
+        # --- DODANE: Rysowanie power-upów ---
+        for powerup in powerups:
+            screen.blit(powerup['surface'], powerup['rect'].topleft)
 
         # --- DODANE: Rysowanie czołgu na wierzchu mapy ---
         if tank_image:
@@ -316,4 +419,9 @@ if __name__ == '__main__':
         print("Wszystkie kafelki będą wyświetlane jako białe kwadraty.")
         print("Upewnij się, że ścieżka ASSETS_PATH jest poprawna i że folder istnieje.\n" + "-" * 60)
     
+    if not os.path.isdir(POWERUPS_ASSETS_PATH):
+        print("-" * 60 + f"\n!!! OSTRZEŻENIE !!!\nNie znaleziono katalogu z grafikami power-upów w: '{POWERUPS_ASSETS_PATH}'")
+        print("Wszystkie power-upy będą wyświetlane jako różowe kwadraty.")
+        print("Upewnij się, że ścieżka POWERUPS_ASSETS_PATH jest poprawna i że folder istnieje.\n" + "-" * 60)
+
     main()

@@ -95,11 +95,11 @@ class MapLoader:
                     # Pozycja w centrum kafelka
                     pos_x = x * tile_size + tile_size / 2
                     pos_y = y * tile_size + tile_size / 2
-                    pos = Position(pos_x, pos_y)
+                    pos = Position(x=pos_x, y=pos_y)
                     tile_id = str(uuid.uuid4())
 
-                    # Tworzymy instancję z wymaganymi argumentami '_id' i '_position'
-                    instance = tile_class(_id=tile_id, _position=pos)
+                    # Tworzymy instancję z wymaganymi argumentami 'id' i 'position'
+                    instance = tile_class(id=tile_id, position=pos)
 
                     if isinstance(instance, Obstacle):
                         obstacle_list.append(instance)
@@ -110,18 +110,15 @@ class MapLoader:
         if not grid_data or not grid_data[0]:
             raise ValueError("Mapa jest pusta lub ma nieprawidłowy format.")
 
-        map_info = MapInfo(
-            _map_seed=map_filename,
-            _obstacle_list=obstacle_list,
-            _powerup_list=[],
-            _terrain_list=terrain_list,
-            _all_tanks=[]
-        )
+        map_pixel_height = len(grid_data) * tile_size
+        map_pixel_width = len(grid_data[0]) * tile_size
 
-        # Dodajemy siatkę jako dodatkowy atrybut, z którego skorzysta scratchpad
-        map_info.grid_data = grid_data
-        map_height_tiles = len(grid_data)
-        map_width_tiles = len(grid_data[0])
-        map_info.grid_dimensions = (map_width_tiles, map_height_tiles)
+        map_info = MapInfo(
+            map_seed=map_filename,
+            size=(map_pixel_width, map_pixel_height),
+            grid_data=grid_data,
+            obstacle_list=obstacle_list,
+            terrain_list=terrain_list,
+        )
 
         return map_info

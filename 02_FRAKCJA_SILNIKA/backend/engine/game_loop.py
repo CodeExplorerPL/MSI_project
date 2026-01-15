@@ -7,6 +7,7 @@ Refactored to use existing structures and improve compatibility
 import time
 from typing import Any, Dict, List, Optional
 
+from ..structures.map_info import MapInfo
 from ..tank.base_tank import Tank
 from ..utils.config import TankType
 from ..utils.logger import GameEventType, get_logger
@@ -27,6 +28,17 @@ class GameLoop:
         self.game_core = GameCore(config) if config else create_default_game()
         self.logger = get_logger()
         self.headless = headless
+        self.renderer = None
+
+        if not self.headless:
+            try:
+                from .renderer import GameRenderer
+                self.renderer = GameRenderer()
+            except ImportError:
+                self.logger.warning(
+                    "Pygame nie jest zainstalowany lub renderer nie mógł zostać zaimportowany. Wymuszanie trybu headless."
+                )
+                self.headless = True
 
         # Komponenty silnika - placeholders for future implementation
         self.map_loader = None
@@ -34,7 +46,7 @@ class GameLoop:
         self.visibility_engine = None
 
         # Stan gry
-        self.map_info = None
+        self.map_info: Optional[MapInfo] = None
         self.tanks: Dict[str, Tank] = {}
         self.agents: Dict[str, Any] = {}  # Agent controllers
         self.powerups: Dict[str, Any] = {}
@@ -64,38 +76,54 @@ class GameLoop:
         try:
             self.logger.info("Starting game initialization...")
 
-            # 1. Inicjalizacja game core
+            self.logger.debug("Step 1: Initializing GameCore...")
             init_result = self.game_core.initialize_game(map_seed)
             if not init_result["success"]:
                 self.logger.error(
                     f"Game core initialization failed: {init_result.get('error')}"
                 )
                 return False
+            self.logger.debug("Step 1: GameCore initialized.")
 
-            # 2. Inicjalizacja komponentów silnika
+            self.logger.debug("Step 2: Initializing engine components...")
             self._initialize_engines()
+            self.logger.debug("Step 2: Engine components initialized.")
 
-            # 3. Wybór i ładowanie mapy
+            self.logger.debug("Step 3: Loading map...")
             if not self._load_map(map_seed):
                 self.logger.error("Map loading failed")
                 return False
+            self.logger.debug("Step 3: Map loaded.")
 
-            # 4. Spawn czołgów
+            self.logger.debug("Step 4: Initializing renderer...")
+            if not self.headless and self.renderer:
+                # Pobieramy dane potrzebne rendererowi, unikając przekazywania całego obiektu MapInfo,
+                # który ma niespójną strukturę (dynamicznie dodawane pole grid_data).
+                grid = getattr(self.map_info, 'grid_data', None)
+                size = tuple(self.map_info.size) if self.map_info and hasattr(self.map_info, 'size') else (500, 500)
+                if not self.renderer.initialize(map_size=size, grid_data=grid):
+                    self.logger.error("Renderer initialization failed.")
+                    return False
+            self.logger.debug("Step 4: Renderer initialized.")
+
+            self.logger.debug("Step 5: Spawning tanks...")
             if not self._spawn_tanks():
                 self.logger.error("Tank spawning failed")
                 return False
+            self.logger.debug("Step 5: Tanks spawned.")
 
-            # 5. Ładowanie agentów
+            self.logger.debug("Step 6: Loading agents...")
             if agent_modules and not self._load_agents(agent_modules):
                 self.logger.error("Agent loading failed")
                 return False
+            self.logger.debug("Step 6: Agents loaded.")
 
-            # 6. Finalizacja inicjalizacji
             self.logger.info("Game initialization completed successfully")
             return True
 
         except Exception as e:
-            self.logger.error(f"Game initialization failed with exception: {e}")
+            import traceback
+            self.logger.error(f"Game initialization failed with an unhandled exception: {e}\n{traceback.format_exc()}")
             return False
 
     def run_game_loop(self) -> Dict[str, Any]:
@@ -132,8 +160,17 @@ class GameLoop:
                 if not tick_info["game_continues"]:
                     break
 
-                # Ograniczenie FPS jeśli potrzebne (opcjonalne)
+                # Renderowanie klatki, jeśli nie jesteśmy w trybie headless
                 if not self.headless:
+                    if not self.renderer.render(
+                        tanks=self.tanks,
+                        projectiles=self.projectiles,
+                        powerups=self.powerups,
+                    ):
+                        self.logger.info("Okno renderera zostało zamknięte przez użytkownika.")
+                        # Przerywamy grę, tak jakby użytkownik wcisnął Ctrl+C
+                        raise KeyboardInterrupt
+                else:  # W trybie headless możemy chcieć małego opóźnienia, by nie zużywać 100% CPU
                     self._limit_fps(tick_duration)
 
             # Zakończenie gry
@@ -168,10 +205,15 @@ class GameLoop:
             # Generowanie raportu wydajności
             self._generate_performance_report()
 
+            # Sprzątanie renderera
+            if self.renderer:
+                self.renderer.cleanup()
+
             self.logger.info("Game cleanup completed")
 
         except Exception as e:
-            self.logger.error(f"Error during cleanup: {e}")
+            import traceback
+            self.logger.error(f"Error during cleanup: {e}\n{traceback.format_exc()}")
 
     def _process_game_tick(self) -> Dict[str, Any]:
         """
@@ -252,8 +294,22 @@ class GameLoop:
             # TODO: Implementacja ładowania mapy gdy MapLoader będzie dostępny
             # self.map_info = self.map_loader.load_map(map_seed)
 
-            # Tymczasowe - stwórz pustą mapę
-            self.map_info = None  # Placeholder
+            # --- TYMCZASOWE TWORZENIE MAPY DLA DEMO UI ---
+            map_width = self.game_core.config.map_config.width
+            map_height = self.game_core.config.map_config.height
+            tile_count_x = map_width // 16
+            tile_count_y = map_height // 16
+
+            # Prosta mapa: trawa z ramką ze ścian
+            grid = [['Wall' if x == 0 or x == tile_count_x - 1 or y == 0 or y == tile_count_y - 1 else 'Grass' for x in range(tile_count_x)] for y in range(tile_count_y)]
+
+            # Tworzymy obiekt MapInfo zgodnie z nową, uproszczoną definicją
+            self.map_info = MapInfo(
+                map_seed=map_seed or "default_seed",
+                size=(map_width, map_height),
+                grid_data=grid
+            )
+            self.logger.info("Utworzono tymczasową mapę na potrzeby demonstracji UI.")
 
             try:
                 self.logger.log_game_event(
@@ -267,7 +323,8 @@ class GameLoop:
             return True
 
         except Exception as e:
-            self.logger.error(f"Failed to load map: {e}")
+            import traceback
+            self.logger.error(f"Failed to load map: {e}\n{traceback.format_exc()}")
             return False
 
     def _spawn_tanks(self) -> bool:
@@ -279,54 +336,50 @@ class GameLoop:
         """
         try:
             self.logger.info("Spawning tanks...")
+            
+            try:
+                self.logger.debug("Importing tank classes for spawning...")
+                from ..tank.light_tank import LightTank
+                from ..tank.heavy_tank import HeavyTank
+                from ..structures.position import Position
+                self.logger.debug("Tank classes imported successfully.")
+            except ImportError:
+                import traceback
+                self.logger.error(f"CRITICAL: Failed to import tank classes.\n{traceback.format_exc()}")
+                return False
 
-            spawn_positions = self.game_core.get_tank_spawn_positions()
-            tank_types = self.game_core.get_available_tank_types()
+            # --- TYMCZASOWE TWORZENIE CZOŁGÓW DLA DEMO UI (z rozszerzonym debugowaniem) ---
+            try:
+                self.logger.info("Attempting to spawn LightTank...")
+                tank1_id = "player1"
+                tank1 = LightTank(_id=tank1_id, _team=1, position=Position(x=100, y=100))
+                tank1.heading = 45.0
+                tank1.barrel_angle = -15.0
+                self.tanks[tank1_id] = tank1
+                self.logger.info(f"Successfully spawned temporary tank: {tank1_id}")
+            except Exception as e:
+                import traceback
+                self.logger.error(f"CRITICAL: Failed to spawn LightTank. Error: {e}\n{traceback.format_exc()}")
+                return False
 
-            tank_id_counter = 1
+            try:
+                self.logger.info("Attempting to spawn HeavyTank...")
+                tank2_id = "player2"
+                tank2 = HeavyTank(_id=tank2_id, _team=2, position=Position(x=400, y=400))
+                tank2.heading = 225.0
+                tank2.barrel_angle = 30.0
+                self.tanks[tank2_id] = tank2
+                self.logger.info(f"Successfully spawned temporary tank: {tank2_id}")
+            except Exception as e:
+                import traceback
+                self.logger.error(f"CRITICAL: Failed to spawn HeavyTank. Error: {e}\n{traceback.format_exc()}")
+                return False
 
-            for team in range(1, self.game_core.config.tank_config.team_count + 1):
-                for tank_in_team in range(self.game_core.config.tank_config.team_size):
-                    # Losowy wybór typu czołgu
-                    tank_type = self._select_random_tank_type(tank_types)
-
-                    # Tworzenie ID czołgu
-                    tank_id = f"tank_{team}_{tank_in_team + 1}"
-
-                    # Pozycja spawnu
-                    position_index = (
-                        team - 1
-                    ) * self.game_core.config.tank_config.team_size + tank_in_team
-                    if position_index < len(spawn_positions):
-                        spawn_pos = spawn_positions[position_index]
-                    else:
-                        # Fallback pozycja
-                        spawn_pos = (
-                            50 + tank_id_counter * 20,
-                            50 + tank_id_counter * 10,
-                        )
-
-                    # TODO: Tworzenie rzeczywistego obiektu czołgu gdy klasy będą gotowe
-                    # tank = self._create_tank(tank_id, team, tank_type, spawn_pos)
-                    # self.tanks[tank_id] = tank
-
-                    self.logger.log_tank_action(
-                        tank_id,
-                        "spawn",
-                        {
-                            "team": team,
-                            "tank_type": tank_type.value,
-                            "position": spawn_pos,
-                        },
-                    )
-
-                    tank_id_counter += 1
-
-            self.logger.info(f"Successfully spawned {len(spawn_positions)} tanks")
             return True
 
         except Exception as e:
-            self.logger.error(f"Failed to spawn tanks: {e}")
+            import traceback
+            self.logger.error(f"CRITICAL: An unexpected error occurred in _spawn_tanks.\n{traceback.format_exc()}")
             return False
 
     def _load_agents(self, agent_modules: List) -> bool:
@@ -355,7 +408,8 @@ class GameLoop:
             return True
 
         except Exception as e:
-            self.logger.error(f"Failed to load agents: {e}")
+            import traceback
+            self.logger.error(f"Failed to load agents: {e}\n{traceback.format_exc()}")
             return False
 
     def _apply_sudden_death_damage(self):
@@ -442,7 +496,8 @@ class GameLoop:
 
             except Exception as e:
                 self.logger.log_agent_interaction(
-                    agent_id, "timeout", error=str(e), tank_id=tank_id
+                    agent_id, "timeout", error=str(e), tank_id=tank_id,
+                    
                 )
 
         return agent_actions
@@ -526,10 +581,10 @@ class GameLoop:
         team_counts = {}
 
         for tank_id, tank in self.tanks.items():
-            # TODO: Pobranie drużyny z czołgu gdy Tank będzie miał team property
-            # team = tank.team
-            # team_counts[team] = team_counts.get(team, 0) + 1
-            pass
+            # Zakładamy, że po refaktoryzacji czołg ma publiczny atrybut 'team'
+            team = getattr(tank, 'team', None)
+            if team is not None:
+                team_counts[team] = team_counts.get(team, 0) + 1
 
         # Aktualizacja w game core
         for team, count in team_counts.items():
@@ -559,7 +614,8 @@ class GameLoop:
                 # agent.end()
                 pass
             except Exception as e:
-                self.logger.error(f"Error ending agent {agent_id}: {e}")
+                import traceback
+                self.logger.error(f"Error ending agent {agent_id}: {e}\n{traceback.format_exc()}")
 
     def _cleanup_resources(self):
         """Czyszczenie zasobów gry."""
@@ -593,8 +649,8 @@ class GameLoop:
             # Fallback to basic performance data
             self.logger.info(f"Performance data: {self.performance_data}")
 
-    def _limit_fps(self, tick_duration: float, target_fps: int = 60):
-        """Ograniczenie FPS jeśli potrzebne."""
+    def _limit_fps(self, tick_duration: float, target_fps: int = 200):
+        """Ograniczenie FPS w trybie headless, aby nie zużywać 100% CPU."""
         target_tick_time = 1.0 / target_fps
         if tick_duration < target_tick_time:
             time.sleep(target_tick_time - tick_duration)
@@ -634,6 +690,7 @@ def run_game(
         return results
 
     except Exception as e:
-        game_loop.logger.error(f"Game execution failed: {e}")
+        import traceback
+        game_loop.logger.error(f"Game execution failed: {e}\n{traceback.format_exc()}")
         game_loop.cleanup_game()
         return {"success": False, "error": str(e)}

@@ -102,8 +102,8 @@ def rectangles_overlap(
 def get_tank_size(tank: TankUnion) -> List[int]:
     """Zwraca rozmiar czołgu niezależnie od nazwy pola w strukturze."""
     if hasattr(tank, "size"):
-        return tank.size
-    return getattr(tank, "_size", [5, 5])
+        return tank.size # type: ignore
+    return [5, 5] # Fallback
 
 
 # ============================================================
@@ -119,9 +119,7 @@ def get_terrain_at_position(
     Zwraca pierwszy teren, którego bounding box zawiera pozycję.
     """
     for terrain in terrains:
-        terrain_position = getattr(terrain, "position", getattr(terrain, "_position", None))
-        terrain_size = getattr(terrain, "size", getattr(terrain, "_size", [1, 1]))
-        if terrain_position and rectangles_overlap(position, [1, 1], terrain_position, terrain_size):
+        if rectangles_overlap(position, [1, 1], terrain.position, terrain.size):
             return terrain
     return None
 
@@ -164,8 +162,8 @@ def move_tank(
     modifier = 1.0
     damage = 0
     if terrain:
-        modifier = getattr(terrain, "movement_speed_modifier", getattr(terrain, "_movement_speed_modifier", 1.0))
-        damage = getattr(terrain, "deal_damage", getattr(terrain, "_deal_damage", 0))
+        modifier = terrain.movement_speed_modifier
+        damage = terrain.deal_damage
 
     effective_speed = speed * modifier
     heading_rad = math.radians(tank.heading)
@@ -205,9 +203,7 @@ def check_tank_obstacle_collision(
     for obstacle in obstacles:
         if not obstacle.is_alive:
             continue
-        obstacle_position = getattr(obstacle, "position", getattr(obstacle, "_position", None))
-        obstacle_size = getattr(obstacle, "size", getattr(obstacle, "_size", [0, 0]))
-        if obstacle_position and rectangles_overlap(tank.position, get_tank_size(tank), obstacle_position, obstacle_size):
+        if rectangles_overlap(tank.position, get_tank_size(tank), obstacle.position, obstacle.size):
             return obstacle
     return None
 
@@ -217,7 +213,7 @@ def check_tank_tank_collision(
     tank2: TankUnion
 ) -> bool:
     """Sprawdza kolizję między dwoma czołgami."""
-    if tank1._id == tank2._id:
+    if tank1.id == tank2.id: # type: ignore
         return False
     return rectangles_overlap(
         tank1.position, get_tank_size(tank1),
@@ -274,7 +270,7 @@ def fire_projectile(
     hit = None
 
     for target in all_tanks:
-        if target._id == tank._id:
+        if target.id == tank.id: # type: ignore
             continue
 
         dist = calculate_distance(tank.position, target.position)
@@ -289,7 +285,7 @@ def fire_projectile(
         if abs(normalize_angle(angle - shoot_direction)) <= 5:
             closest_hit_distance = dist
             hit = ProjectileHit(
-                hit_tank_id=target._id,
+                hit_tank_id=target.id, # type: ignore
                 damage_dealt=damage,
                 hit_position=target.position
             )
@@ -298,24 +294,20 @@ def fire_projectile(
         if not obstacle.is_alive:
             continue
 
-        obstacle_pos = getattr(obstacle, "position", getattr(obstacle, "_position", None))
-        if obstacle_pos is None:
-            continue
-
-        dist = calculate_distance(tank.position, obstacle_pos)
+        dist = calculate_distance(tank.position, obstacle.position)
         if dist < closest_hit_distance:
             angle = math.degrees(math.atan2(
-                obstacle_pos.y - tank.position.y,
-                obstacle_pos.x - tank.position.x
+                obstacle.position.y - tank.position.y,
+                obstacle.position.x - tank.position.x
             ))
 
             if abs(normalize_angle(angle - shoot_direction)) <= 5:
                 if obstacle.is_destructible:
                     obstacle.is_alive = False
                 return ProjectileHit(
-                    hit_obstacle_id=getattr(obstacle, "id", getattr(obstacle, "_id", None)),
+                    hit_obstacle_id=obstacle.id,
                     damage_dealt=damage,
-                    hit_position=obstacle_pos
+                    hit_position=obstacle.position
                 )
 
     return hit
@@ -407,7 +399,7 @@ def process_physics_tick(
         if tank.hp <= 0:
             continue
 
-        action = actions.get(tank._id)
+        action = actions.get(tank.id) # type: ignore
         if not action:
             continue
 
@@ -419,16 +411,16 @@ def process_physics_tick(
         if tank.hp <= 0:
             continue
 
-        action = actions.get(tank._id)
+        action = actions.get(tank.id) # type: ignore
         if action and action.should_fire:
             hit = fire_projectile(tank, all_tanks, map_info.obstacle_list)
             if hit:
                 results["projectile_hits"].append(hit)
                 if hit.hit_tank_id:
                     for target in all_tanks:
-                        if target._id == hit.hit_tank_id:
+                        if target.id == hit.hit_tank_id: # type: ignore
                             if apply_damage(target, hit.damage_dealt):
-                                results["destroyed_tanks"].append(target._id)
+                                results["destroyed_tanks"].append(target.id) # type: ignore
                 if hit.hit_obstacle_id:
                     results["destroyed_obstacles"].append(hit.hit_obstacle_id)
 
@@ -436,7 +428,7 @@ def process_physics_tick(
         if tank.hp <= 0:
             continue
 
-        action = actions.get(tank._id)
+        action = actions.get(tank.id) # type: ignore
         if not action or action.move_speed == 0:
             continue
 
@@ -447,7 +439,7 @@ def process_physics_tick(
         tank.position = new_pos
 
         if dmg and apply_damage(tank, dmg):
-            results["destroyed_tanks"].append(tank._id)
+            results["destroyed_tanks"].append(tank.id) # type: ignore
 
     for tank in all_tanks:
         powerup = check_powerup_pickup(tank, map_info.powerup_list)
@@ -455,7 +447,7 @@ def process_physics_tick(
             apply_powerup(tank, powerup)
             map_info.powerup_list.remove(powerup)
             results["picked_powerups"].append(
-                {"tank_id": tank._id, "powerup": powerup}
+                {"tank_id": tank.id, "powerup": powerup} # type: ignore
             )
 
     return results

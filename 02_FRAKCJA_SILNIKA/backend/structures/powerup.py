@@ -17,29 +17,17 @@ class PowerUpType(Enum):
 @dataclass
 class PowerUpData:
     """Informacje o przedmiocie do zebrania (np. Apteczka, Amunicja)."""
-    _position: Position
-    _powerup_type: PowerUpType
-    _size: List[int] = field(default_factory=lambda: [2, 2])
-    
-    @property
-    def position(self) -> Position:
-        return self._position
-    
-    @property
-    def powerup_type(self) -> PowerUpType:
-        return self._powerup_type
-    
-    @property
-    def size(self) -> List[int]:
-        return self._size
+    position: Position
+    powerup_type: PowerUpType
+    size: List[int] = field(default_factory=lambda: [2, 2])
     
     @property
     def value(self) -> int:
-        return self._powerup_type.value['Value']
+        return self.powerup_type.value['Value']
     
     @property
     def name(self) -> str:
-        return self._powerup_type.value['Name']
+        return self.powerup_type.value['Name']
 
     @property
     def ammo_type(self) -> Union[str, None]:

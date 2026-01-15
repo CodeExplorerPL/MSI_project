@@ -3,6 +3,9 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Logs
+MSI_PROJECT/MSI_project/02_FRAKCJA_SILNIKA/logs/
+
 # C extensions
 *.so
 

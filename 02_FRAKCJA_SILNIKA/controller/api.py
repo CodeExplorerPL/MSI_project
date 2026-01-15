@@ -10,7 +10,7 @@ if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
 # Importy z backendu
-from backend.structures.position import Position
+# from backend.structures.position import Position
 from backend.structures.ammo import AmmoType, AmmoSlot
 
 from backend.tank.base_tank import Tank

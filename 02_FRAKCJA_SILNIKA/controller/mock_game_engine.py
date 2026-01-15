@@ -25,7 +25,7 @@ parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
-from controller.api import (
+from ..controller.api import (
     LightTank, Position, TankSensorData, SeenTank, 
     AmmoType, AmmoSlot
 )

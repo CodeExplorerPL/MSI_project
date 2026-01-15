@@ -19,6 +19,9 @@ numba>=0.56.0
 # Logging and monitoring
 colorlog>=6.7.0
 
+# HTTP client for agent communication
+httpx>=0.24.0
+
 # Development and testing
 pytest>=7.0.0
 pytest-cov>=4.0.0

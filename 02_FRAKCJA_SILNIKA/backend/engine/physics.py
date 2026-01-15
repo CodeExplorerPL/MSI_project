@@ -21,6 +21,14 @@ from ..structures import (
 from ..tank.light_tank import LightTank
 from ..tank.heavy_tank import HeavyTank
 from ..tank.sniper_tank import SniperTank
+import sys
+import os
+
+# Add parent directory to path for controller imports
+_base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _base_dir not in sys.path:
+    sys.path.insert(0, _base_dir)
+
 from controller.api import ActionCommand
 
 TankUnion = Union[LightTank, HeavyTank, SniperTank]

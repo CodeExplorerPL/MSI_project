@@ -101,7 +101,7 @@ class MapLoader:
                     pos = Position(pos_x, pos_y)
                     tile_id = str(uuid.uuid4())
 
-                    instance = tile_class(id=tile_id, position=pos)
+                    instance = tile_class(_id=tile_id, _position=pos)
 
                     if isinstance(instance, Obstacle):
                         obstacle_list.append(instance)
@@ -112,12 +112,12 @@ class MapLoader:
         map_total_height = map_height * tile_size
 
         map_info = MapInfo(
-            map_seed=map_filename,
-            obstacle_list=obstacle_list,
-            terrain_list=terrain_list,
-            powerup_list=[],  # Lista power-upów jest na razie pusta
-            all_tanks=[],     # Lista czołgów jest na razie pusta
-            size=[map_total_width, map_total_height]
+            _map_seed=map_filename,
+            _obstacle_list=obstacle_list,
+            _terrain_list=terrain_list,
+            _powerup_list=[],  # Lista power-upów jest na razie pusta
+            _all_tanks=[],     # Lista czołgów jest na razie pusta
+            _size=[map_total_width, map_total_height]
         )
 
         return map_info

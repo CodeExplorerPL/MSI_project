@@ -491,7 +491,7 @@ class GameLoop:
 
     def _get_spawn_position(self, team: int, index: int) -> Position:
         """
-        Get spawn position for a tank.
+        Get spawn position for a tank. Calculates positions proportionally to the map size.
 
         Args:
             team: Team number (1 or 2)
@@ -500,17 +500,35 @@ class GameLoop:
         Returns:
             Spawn position
         """
-        map_width = self.game_core.config.map_config.width
-        
+        if not self.map_info or not self.map_info.size:
+            # Fallback to config if map not loaded, which is unlikely here.
+            self.logger.warning("MapInfo not available for spawn, using default config size.")
+            map_width = self.game_core.config.map_config.width
+            map_height = self.game_core.config.map_config.height
+        else:
+            map_width, map_height = self.map_info.size
+
+        # Proportional constants based on an original 500x500 map design
+        X_MARGIN_RATIO = 0.1  # 50 / 500
+        Y_MARGIN_RATIO = 0.1  # 50 / 500
+        X_SPACING_RATIO = 0.03 # 15 / 500
+        Y_SPACING_RATIO = 0.04 # 20 / 500
+        RIGHT_MARGIN_RATIO = 0.2 # 100 / 500
+
         if team == 1:
             # Team 1 spawns on left side
-            x = 50 + (index * 15)
-            y = 50 + (index * 20)
+            x = map_width * X_MARGIN_RATIO + (index * map_width * X_SPACING_RATIO)
+            y = map_height * Y_MARGIN_RATIO + (index * map_height * Y_SPACING_RATIO)
         else:
             # Team 2 spawns on right side
-            x = map_width - 100 + (index * 15)
-            y = 50 + (index * 20)
-        
+            x = map_width * (1 - RIGHT_MARGIN_RATIO) + (index * map_width * X_SPACING_RATIO)
+            y = map_height * Y_MARGIN_RATIO + (index * map_height * Y_SPACING_RATIO)
+
+        # Clamp positions to be safely within map boundaries
+        margin = 5.0 # A small margin to avoid spawning exactly on the edge
+        x = max(margin, min(x, map_width - margin))
+        y = max(margin, min(y, map_height - margin))
+
         return Position(x, y)
 
     def _load_agents(self, agent_modules: Optional[List]) -> bool:

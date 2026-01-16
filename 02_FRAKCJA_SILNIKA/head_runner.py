@@ -13,6 +13,8 @@ import subprocess
 import sys
 import os
 import time
+import random
+from pygame.math import Vector2
 import pygame
 import math
 from typing import Dict, Any, List
@@ -39,7 +41,7 @@ except ImportError as e:
 # --- Stałe Konfiguracyjne Grafiki ---
 LOG_LEVEL = "INFO"
 MAP_SEED = "map1.csv"
-TARGET_FPS = 60
+TARGET_FPS = 5
 SCALE = 2  # Współczynnik skalowania grafiki (wszystko będzie 2x większe)
 TILE_SIZE = 10  # To MUSI być zgodne z domyślną wartością w map_loader.py
 
@@ -47,6 +49,7 @@ ASSETS_BASE_PATH = os.path.join(current_dir, 'frontend', 'assets')
 TILE_ASSETS_PATH = os.path.join(ASSETS_BASE_PATH, 'tiles')
 POWERUP_ASSETS_PATH = os.path.join(ASSETS_BASE_PATH, 'power-ups')
 TANK_ASSETS_PATH = os.path.join(ASSETS_BASE_PATH, 'tanks')
+ICONS_ASSETS_PATH = os.path.join(ASSETS_BASE_PATH, 'icons')
 
 BACKGROUND_COLOR = (20, 20, 30)
 TEAM_COLORS = {
@@ -55,19 +58,98 @@ TEAM_COLORS = {
 }
 
 TANK_ASSET_MAP = {
-    "LightTank": "light_tank",
-    "HeavyTank": "heavy_tank",
-    "SniperTank": "sniper_tank"
+    "LIGHT": "light_tank",
+    "HEAVY": "heavy_tank",
+    "Sniper": "sniper_tank"
 }
 
+POWERUP_ASSET_MAP = {
+    "MEDKIT": "Medkit",
+    "SHIELD": "Shield",
+    "OVERCHARGE": "Overcharge",
+    "AMMO_HEAVY": "AmmoBox_Heavy",
+    "AMMO_LIGHT": "AmmoBox_Light",
+    "AMMO_LONG_DISTANCE": "AmmoBox_Sniper",
+}
+
+
+
 # --- Funkcje Pomocnicze Renderowania ---
+
+class ExplosionParticle:
+    """Prosta klasa do zarządzania cząsteczkami eksplozji."""
+    def __init__(self, pos, velocity, start_size, lifetime):
+        self.pos = list(pos)
+        self.velocity = list(velocity)
+        self.size = start_size
+        self.lifetime = lifetime
+        self.max_lifetime = lifetime
+        # Każda cząsteczka losuje swój kolor z palety eksplozji
+        self.color = random.choice([
+            (255, 0, 0),      # Czerwony
+            (255, 100, 0),    # Pomarańczowy
+            (255, 215, 0),    # Złoty/Żółty
+            (139, 0, 0)       # Ciemnoczerwony
+        ])
+
+    def update(self):
+        """Aktualizuje pozycję i czas życia cząsteczki."""
+        self.pos[0] += self.velocity[0]
+        self.pos[1] += self.velocity[1]
+        self.lifetime -= 1
+        # Dodaj losowość do ruchu, aby dym się rozpraszał
+        self.velocity[0] += random.uniform(-0.05, 0.05)
+        self.velocity[1] += random.uniform(-0.05, 0.05)
+
+    def draw(self, surface):
+        """Rysuje cząsteczkę na podanej powierzchni."""
+        if self.lifetime > 0:
+            lerp_factor = self.lifetime / self.max_lifetime
+            current_size = int(self.size * lerp_factor)
+            if current_size > 0:
+                r, g, b = self.color
+                # Przyciemnianie koloru w miarę upływu życia cząsteczki
+                final_color = (
+                    int(r * lerp_factor),
+                    int(g * lerp_factor),
+                    int(b * lerp_factor)
+                )
+                pygame.draw.circle(surface, final_color, self.pos, current_size)
+
+def generate_radial_explosion(particles_list: List[ExplosionParticle], position: tuple, num_particles: int):
+    """Generuje promienisty "wybuch" cząsteczek w danym punkcie."""
+    for _ in range(num_particles):
+        angle = random.uniform(0, 360)
+        speed = random.uniform(0.5, 2.0)
+        velocity = Vector2(1, 0).rotate(angle) * speed
+
+        particles_list.append(ExplosionParticle(
+            pos=position, velocity=velocity,
+            start_size=random.randint(3, 4), lifetime=random.randint(20, 40)
+        ))
+
+def generate_cone_explosion(particles_list: List[ExplosionParticle], position: tuple, num_particles: int, base_direction_vector: Vector2, cone_angle: float):
+    """Generuje stożek cząsteczek eksplozji."""
+    for _ in range(num_particles):
+        # Losowy kąt wewnątrz stożka
+        angle_offset = random.uniform(-cone_angle / 2, cone_angle / 2)
+        # Losowa prędkość
+        speed = random.uniform(1.5, 3.5)
+        # Obróć wektor kierunku i pomnóż przez prędkość
+        velocity = base_direction_vector.rotate(angle_offset) * speed
+        
+        particles_list.append(ExplosionParticle(
+            pos=position, velocity=velocity, 
+            start_size=random.randint(3, 5), lifetime=random.randint(20, 40)
+        ))
 
 def load_assets():
     """Ładuje wszystkie potrzebne zasoby graficzne."""
     assets = {
         'tiles': {},
         'powerups': {},
-        'tanks': {}
+        'tanks': {},
+        'icons': {}
     }
     print("--- Ładowanie zasobów graficznych ---")
 
@@ -98,79 +180,107 @@ def load_assets():
     for tank_type, folder_name in TANK_ASSET_MAP.items():
         try:
             base_path = os.path.join(TANK_ASSETS_PATH, folder_name)
-            # ROZWIĄZANIE: Pre-rotacja assetów o -90 stopni, aby dopasować je do systemu fizyki (0 = Wschód)
-            # Dzięki temu Północne grafiki zachowują się jak Wschodnie.
+            # Grafiki czołgów są domyślnie skierowane na Północ (do góry).
             assets['tanks'][tank_type] = {
-                'body': pygame.transform.rotate(pygame.transform.scale(pygame.image.load(os.path.join(base_path, 'tnk1.png')).convert_alpha(), tank_render_size), -90),
-                'mask_body': pygame.transform.rotate(pygame.transform.scale(pygame.image.load(os.path.join(base_path, 'msk1.png')).convert_alpha(), tank_render_size), -90),
-                'turret': pygame.transform.rotate(pygame.transform.scale(pygame.image.load(os.path.join(base_path, 'tnk2.png')).convert_alpha(), tank_render_size), -90),
-                'mask_turret': pygame.transform.rotate(pygame.transform.scale(pygame.image.load(os.path.join(base_path, 'msk2.png')).convert_alpha(), tank_render_size), -90),
+                'body': pygame.transform.scale(pygame.image.load(os.path.join(base_path, 'tnk1.png')).convert_alpha(), tank_render_size),
+                'mask_body': pygame.transform.scale(pygame.image.load(os.path.join(base_path, 'msk1.png')).convert_alpha(), tank_render_size),
+                'turret': pygame.transform.scale(pygame.image.load(os.path.join(base_path, 'tnk2.png')).convert_alpha(), tank_render_size),
+                'mask_turret': pygame.transform.scale(pygame.image.load(os.path.join(base_path, 'msk2.png')).convert_alpha(), tank_render_size),
             }
         except pygame.error:
             print(f"[!] Nie znaleziono assetów dla czołgu: {tank_type}")
+            
+    # Ikony
+    icon_render_size = (128, 64)
+    for tank_type, folder_name in TANK_ASSET_MAP.items():
+        # folder_name to 'light_tank', 'heavy_tank', etc.
+        icon_filename = f"{folder_name}.png"
+        try:
+            path = os.path.join(ICONS_ASSETS_PATH, icon_filename)
+            img = pygame.image.load(path).convert_alpha()
+            assets['icons'][tank_type] = pygame.transform.scale(img, icon_render_size)
+        except pygame.error:
+            # Jeśli nie ma ikony, stwórz pusty placeholder, żeby uniknąć błędów
+            print(f"[!] Nie znaleziono assetu dla ikony: {icon_filename}")
+            assets['icons'][tank_type] = pygame.Surface(icon_render_size, pygame.SRCALPHA)
 
     print("--- Ładowanie zakończone ---")
     return assets
 
-def draw_tank(surface: pygame.Surface, tank: Tank, assets: Dict, scale: int):
-    """Rysuje pojedynczy czołg na ekranie z uwzględnieniem skali."""
+def draw_tank(surface: pygame.Surface, tank: Tank, assets: Dict, scale: int, map_height: int):
+    """Rysuje pojedynczy czołg (żywy lub wrak) na ekranie z uwzględnieniem skali i odwróconej osi Y."""
     tank_assets = assets['tanks'].get(tank._tank_type)
     if not tank_assets:
         return
 
+    is_alive = tank.is_alive()
     team_color = TEAM_COLORS.get(tank.team, (255, 255, 255))
 
-    # Przeskalowana pozycja środka czołgu
-    center_pos = (tank.position.x * scale, tank.position.y * scale)
+    # Przeskalowana i odwrócona pozycja środka czołgu
+    center_pos = (tank.position.x * scale, map_height - (tank.position.y * scale))
 
     # --- Kadłub ---
-    body_img = tank_assets['body']
-    rotated_body = pygame.transform.rotate(body_img, tank.heading)
+    body_img = tank_assets['body'].copy()
+    if not is_alive:
+        body_img.set_alpha(100)  # Półprzezroczysty wrak
+
+    # Obrót: Kąty w silniku rosną zgodnie z zegarem, a w Pygame przeciwnie.
+    # Dlatego obracamy o wartość ujemną.
+    rotated_body = pygame.transform.rotate(body_img, -tank.heading)
     body_rect = rotated_body.get_rect(center=center_pos)
     surface.blit(rotated_body, body_rect.topleft)
 
     # Maska koloru kadłuba
-    mask_body_img = tank_assets['mask_body']
-    color_layer = pygame.Surface(mask_body_img.get_size(), pygame.SRCALPHA)
+    mask_body_img = tank_assets['mask_body'].copy()
+    if not is_alive:
+        mask_body_img.set_alpha(100)
+    # Zgodnie z map_generation_scratchpad.py dla poprawnego kolorowania
+    color_layer = pygame.Surface(mask_body_img.get_size())
     color_layer.fill(team_color) # Użyj koloru drużyny
-    color_layer.blit(mask_body_img, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-    rotated_mask = pygame.transform.rotate(color_layer, tank.heading)
+    color_layer.blit(mask_body_img, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+    color_layer.set_colorkey((0, 0, 0))
+    rotated_mask = pygame.transform.rotate(color_layer, -tank.heading)
     surface.blit(rotated_mask, body_rect.topleft)
 
-    # --- Wieża ---
-    turret_img = tank_assets['turret']
-    turret_angle = tank.heading + tank.barrel_angle
-    rotated_turret = pygame.transform.rotate(turret_img, turret_angle)
-    turret_rect = rotated_turret.get_rect(center=center_pos)
-    surface.blit(rotated_turret, turret_rect.topleft)
+    # Wieżę rysujemy tylko dla żywych czołgów
+    if is_alive:
+        # --- Wieża ---
+        turret_img = tank_assets['turret']
+        # Kąt lufy jest względny do kadłuba, więc sumujemy kąty.
+        total_turret_angle = tank.heading - tank.barrel_angle
+        rotated_turret = pygame.transform.rotate(turret_img, -total_turret_angle)
+        turret_rect = rotated_turret.get_rect(center=center_pos)
+        surface.blit(rotated_turret, turret_rect.topleft)
 
-    # Maska koloru wieży
-    mask_turret_img = tank_assets['mask_turret']
-    turret_color_layer = pygame.Surface(mask_turret_img.get_size(), pygame.SRCALPHA)
-    turret_color_layer.fill(team_color) # Użyj koloru drużyny
-    turret_color_layer.blit(mask_turret_img, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-    rotated_turret_mask = pygame.transform.rotate(turret_color_layer, turret_angle)
-    surface.blit(rotated_turret_mask, turret_rect.topleft)
+        # Maska koloru wieży
+        mask_turret_img = tank_assets['mask_turret']
+        turret_color_layer = pygame.Surface(mask_turret_img.get_size())
+        turret_color_layer.fill(team_color) # Użyj koloru drużyny
+        turret_color_layer.blit(mask_turret_img, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+        turret_color_layer.set_colorkey((0, 0, 0))
+        rotated_turret_mask = pygame.transform.rotate(turret_color_layer, -total_turret_angle)
+        surface.blit(rotated_turret_mask, turret_rect.topleft)
 
     # --- Pasek HP ---
-    hp_bar_width = 40
-    hp_bar_height = 5
-    hp_ratio = max(0, tank.hp / tank._max_hp)
-    # Pozycjonowanie paska HP nad czołgiem
-    hp_bar_x = center_pos[0] - hp_bar_width / 2
-    hp_bar_y = center_pos[1] - (tank_assets['body'].get_height() / 2) - 10
-    pygame.draw.rect(surface, (50, 50, 50), (hp_bar_x, hp_bar_y, hp_bar_width, hp_bar_height))
-    pygame.draw.rect(surface, (0, 255, 0), (hp_bar_x, hp_bar_y, hp_bar_width * hp_ratio, hp_bar_height))
+    if is_alive:
+        hp_bar_width = 40
+        hp_bar_height = 5
+        hp_ratio = max(0, tank.hp / tank._max_hp)
+        # Pozycjonowanie paska HP nad czołgiem
+        hp_bar_x = center_pos[0] - hp_bar_width / 2
+        hp_bar_y = center_pos[1] - (body_img.get_height() / 2) - 15 # Trochę wyżej
+        pygame.draw.rect(surface, (50, 50, 50), (hp_bar_x, hp_bar_y, hp_bar_width, hp_bar_height))
+        pygame.draw.rect(surface, (0, 255, 0), (hp_bar_x, hp_bar_y, hp_bar_width * hp_ratio, hp_bar_height))
 
-def draw_shot_effect(surface: pygame.Surface, start_pos: Dict, end_pos: Dict, life: int, scale: int):
+def draw_shot_effect(surface: pygame.Surface, start_pos: Dict, end_pos: Dict, life: int, scale: int, map_height: int):
     """Rysuje linię symbolizującą strzał z uwzględnieniem skali."""
     if life > 0:
         alpha = int(255 * (life / 10.0)) # Efekt zanikania
         color = (255, 255, 0, alpha)
         line_surface = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
-        # Skalowanie pozycji
-        scaled_start = (start_pos.x * scale, start_pos.y * scale)
-        scaled_end = (end_pos.x * scale, end_pos.y * scale)
+        # Skalowanie i odwracanie pozycji
+        scaled_start = (start_pos.x * scale, map_height - (start_pos.y * scale))
+        scaled_end = (end_pos.x * scale, map_height - (end_pos.y * scale))
         pygame.draw.line(line_surface, color, scaled_start, scaled_end, 2)
         surface.blit(line_surface, (0, 0))
 
@@ -186,9 +296,9 @@ def create_background_surface(map_info: Any, assets: Dict, scale: int, width: in
         obj_class_name = obj.__class__.__name__
         asset = assets['tiles'].get(obj_class_name)
         if asset:
-            # Pozycja obiektu to jego środek. Skalujemy ją.
+            # Pozycja obiektu to jego środek. Skalujemy ją i odwracamy oś Y.
             pos_x = obj._position.x * scale
-            pos_y = obj._position.y * scale
+            pos_y = height - (obj._position.y * scale)
             # Obliczamy lewy górny róg na podstawie przeskalowanego środka i rozmiaru assetu
             top_left = (pos_x - asset.get_width() / 2, pos_y - asset.get_height() / 2)
             background.blit(asset, top_left)
@@ -196,45 +306,210 @@ def create_background_surface(map_info: Any, assets: Dict, scale: int, width: in
     print("--- Tło mapy utworzone ---")
     return background
 
-def draw_ui(screen: pygame.Surface, font: pygame.font.Font, game_loop: GameLoop, window_width: int, map_rect: pygame.Rect):
+def draw_ui(screen: pygame.Surface, font: pygame.font.Font, game_loop: GameLoop, window_width: int, map_rect: pygame.Rect, assets: Dict):
     """Rysuje interfejs użytkownika na bocznych panelach."""
     
+    # Mniejsza czcionka dla szczegółów czołgów
+    detail_font = pygame.font.Font(None, 22)
+
     # Statystyki drużyn
-    team1_alive = sum(1 for t in game_loop.tanks.values() if t.team == 1 and t.is_alive())
+    team1_tanks = sorted([t for t in game_loop.tanks.values() if t.team == 1], key=lambda t: t._id)
+    team1_alive = sum(1 for t in team1_tanks if t.is_alive())
     team1_kills = sum(s.tanks_killed for s in game_loop.scoreboards.values() if s.team == 1)
     
-    team2_alive = sum(1 for t in game_loop.tanks.values() if t.team == 2 and t.is_alive())
+    team2_tanks = sorted([t for t in game_loop.tanks.values() if t.team == 2], key=lambda t: t._id)
+    team2_alive = sum(1 for t in team2_tanks if t.is_alive())
     team2_kills = sum(s.tanks_killed for s in game_loop.scoreboards.values() if s.team == 2)
 
     # --- Panel lewy (Team 1) ---
     panel1_x = map_rect.left / 2
+    current_y = 100
     
     title1_surf = font.render("TEAM 1", True, TEAM_COLORS[1])
-    title1_rect = title1_surf.get_rect(center=(panel1_x, 100))
+    title1_rect = title1_surf.get_rect(center=(panel1_x, current_y))
     screen.blit(title1_surf, title1_rect)
+    current_y += 50
 
     alive1_surf = font.render(f"Alive: {team1_alive}", True, (200, 200, 200))
-    alive1_rect = alive1_surf.get_rect(center=(panel1_x, 150))
+    alive1_rect = alive1_surf.get_rect(center=(panel1_x, current_y))
     screen.blit(alive1_surf, alive1_rect)
+    current_y += 30
 
     kills1_surf = font.render(f"Kills: {team1_kills}", True, (200, 200, 200))
-    kills1_rect = kills1_surf.get_rect(center=(panel1_x, 180))
+    kills1_rect = kills1_surf.get_rect(center=(panel1_x, current_y))
     screen.blit(kills1_surf, kills1_rect)
+    current_y += 30
+
+    # Szczegóły czołgów drużyny 1
+    for tank in team1_tanks:
+        if not tank.is_alive():
+            continue
+
+        # Wyświetlanie ikony typu czołg
+        icon_surf = assets['icons'].get(tank._tank_type)
+        icon_rect = icon_surf.get_rect(centerx=panel1_x, top=current_y)
+        screen.blit(icon_surf, icon_rect)
+        current_y += 70
+
+        # --- HP Bar ---
+        hp_bar_width = 120
+        hp_bar_height = 12
+        hp_ratio = max(0, tank.hp / tank._max_hp)
+        bar_x = panel1_x - hp_bar_width / 2
+        bar_y = current_y
+        pygame.draw.rect(screen, (100, 0, 0), (bar_x, bar_y, hp_bar_width, hp_bar_height))
+        pygame.draw.rect(screen, TEAM_COLORS[1], (bar_x, bar_y, hp_bar_width * hp_ratio, hp_bar_height))
+        pygame.draw.rect(screen, (255, 255, 255), (bar_x, bar_y, hp_bar_width, hp_bar_height), 1)
+        current_y += hp_bar_height + 10
+
+        # --- HP Text ---
+        hp_text = f"{tank.hp} / {tank._max_hp}"
+        hp_surf = detail_font.render(hp_text, True, (255, 255, 255))
+        hp_rect = hp_surf.get_rect(center=(panel1_x, current_y))
+        screen.blit(hp_surf, hp_rect)
+        current_y += 20
+
+        # Wyświetlanie wszystkich typów amunicji
+        for ammo_type in AmmoType:
+            ammo_slot = tank.ammo.get(ammo_type)
+            count = ammo_slot.count if ammo_slot else 0
+            
+            prefix = "> " if tank.ammo_loaded == ammo_type else "  "
+            ammo_text = f"{prefix}{ammo_type.name}: {count}"
+            
+            ammo_surf = detail_font.render(ammo_text, True, (200, 200, 200))
+            ammo_rect = ammo_surf.get_rect(center=(panel1_x, current_y))
+            screen.blit(ammo_surf, ammo_rect)
+            current_y += 20
+
+        current_y += 3 # Dodatkowy odstęp między czołgami
 
     # --- Panel prawy (Team 2) ---
     panel2_x = map_rect.right + (window_width - map_rect.right) / 2
+    current_y = 100
 
     title2_surf = font.render("TEAM 2", True, TEAM_COLORS[2])
-    title2_rect = title2_surf.get_rect(center=(panel2_x, 100))
+    title2_rect = title2_surf.get_rect(center=(panel2_x, current_y))
     screen.blit(title2_surf, title2_rect)
+    current_y += 50
 
     alive2_surf = font.render(f"Alive: {team2_alive}", True, (200, 200, 200))
-    alive2_rect = alive2_surf.get_rect(center=(panel2_x, 150))
+    alive2_rect = alive2_surf.get_rect(center=(panel2_x, current_y))
     screen.blit(alive2_surf, alive2_rect)
+    current_y += 30
 
     kills2_surf = font.render(f"Kills: {team2_kills}", True, (200, 200, 200))
-    kills2_rect = kills2_surf.get_rect(center=(panel2_x, 180))
+    kills2_rect = kills2_surf.get_rect(center=(panel2_x, current_y))
     screen.blit(kills2_surf, kills2_rect)
+    current_y += 30
+
+    # Szczegóły czołgów drużyny 2
+    for tank in team2_tanks:
+        if not tank.is_alive():
+            continue
+
+        # Wyświetlanie ikony typu czołgu
+        icon_surf = assets['icons'].get(tank._tank_type)
+        icon_rect = icon_surf.get_rect(centerx=panel2_x, top=current_y)
+        screen.blit(icon_surf, icon_rect)
+        current_y += 70
+
+        # --- HP Bar ---
+        hp_bar_width = 120
+        hp_bar_height = 12
+        hp_ratio = max(0, tank.hp / tank._max_hp)
+        bar_x = panel2_x - hp_bar_width / 2
+        bar_y = current_y
+        pygame.draw.rect(screen, (100, 0, 0), (bar_x, bar_y, hp_bar_width, hp_bar_height))
+        pygame.draw.rect(screen, TEAM_COLORS[2], (bar_x, bar_y, hp_bar_width * hp_ratio, hp_bar_height))
+        pygame.draw.rect(screen, (255, 255, 255), (bar_x, bar_y, hp_bar_width, hp_bar_height), 1)
+        current_y += hp_bar_height + 10
+
+        # --- HP Text ---
+        hp_text = f"{tank.hp} / {tank._max_hp}"
+        hp_surf = detail_font.render(hp_text, True, (255, 255, 255))
+        hp_rect = hp_surf.get_rect(center=(panel2_x, current_y))
+        screen.blit(hp_surf, hp_rect)
+        current_y += 20
+
+        # Wyświetlanie wszystkich typów amunicji
+        for ammo_type in AmmoType:
+            ammo_slot = tank.ammo.get(ammo_type)
+            count = ammo_slot.count if ammo_slot else 0
+            
+            prefix = "> " if tank.ammo_loaded == ammo_type else "  "
+            ammo_text = f"{prefix}{ammo_type.name}: {count}"
+            
+            ammo_surf = detail_font.render(ammo_text, True, (200, 200, 200))
+            ammo_rect = ammo_surf.get_rect(center=(panel2_x, current_y))
+            screen.blit(ammo_surf, ammo_rect)
+            current_y += 20
+
+        current_y += 5 # Dodatkowy odstęp między czołgami
+
+
+    # --- Panel prawy (Team 2) ---
+    panel2_x = map_rect.right + (window_width - map_rect.right) / 2
+    current_y = 100
+
+    title2_surf = font.render("TEAM 2", True, TEAM_COLORS[2])
+    title2_rect = title2_surf.get_rect(center=(panel2_x, current_y))
+    screen.blit(title2_surf, title2_rect)
+    current_y += 50
+
+    alive2_surf = font.render(f"Alive: {team2_alive}", True, (200, 200, 200))
+    alive2_rect = alive2_surf.get_rect(center=(panel2_x, current_y))
+    screen.blit(alive2_surf, alive2_rect)
+    current_y += 30
+
+    kills2_surf = font.render(f"Kills: {team2_kills}", True, (200, 200, 200))
+    kills2_rect = kills2_surf.get_rect(center=(panel2_x, current_y))
+    screen.blit(kills2_surf, kills2_rect)
+    current_y += 30
+
+    # Szczegóły czołgów drużyny 2
+    for tank in team2_tanks:
+        if not tank.is_alive():
+            continue
+
+        # Wyświetlanie ikony typu czołgu
+        icon_surf = assets['icons'].get(tank._tank_type)
+        icon_rect = icon_surf.get_rect(centerx=panel2_x, top=current_y)
+        screen.blit(icon_surf, icon_rect)
+        current_y += 70
+
+        # --- HP Bar ---
+        hp_bar_width = 120
+        hp_bar_height = 12
+        hp_ratio = max(0, tank.hp / tank._max_hp)
+        bar_x = panel2_x - hp_bar_width / 2
+        bar_y = current_y
+        pygame.draw.rect(screen, (100, 0, 0), (bar_x, bar_y, hp_bar_width, hp_bar_height))
+        pygame.draw.rect(screen, TEAM_COLORS[2], (bar_x, bar_y, hp_bar_width * hp_ratio, hp_bar_height))
+        pygame.draw.rect(screen, (255, 255, 255), (bar_x, bar_y, hp_bar_width, hp_bar_height), 1)
+        current_y += hp_bar_height + 10
+
+        # --- HP Text ---
+        hp_text = f"{tank.hp} / {tank._max_hp}"
+        hp_surf = detail_font.render(hp_text, True, (255, 255, 255))
+        hp_rect = hp_surf.get_rect(center=(panel2_x, current_y))
+        screen.blit(hp_surf, hp_rect)
+        current_y += 20
+
+        # Wyświetlanie wszystkich typów amunicji
+        for ammo_type in AmmoType:
+            ammo_slot = tank.ammo.get(ammo_type)
+            count = ammo_slot.count if ammo_slot else 0
+            
+            prefix = "> " if tank.ammo_loaded == ammo_type else "  "
+            ammo_text = f"{prefix}{ammo_type.name}: {count}"
+            
+            ammo_surf = detail_font.render(ammo_text, True, (200, 200, 200))
+            ammo_rect = ammo_surf.get_rect(center=(panel2_x, current_y))
+            screen.blit(ammo_surf, ammo_rect)
+            current_y += 20
+
+        current_y += 5 # Dodatkowy odstęp między czołgami
 
 def draw_debug_info(screen: pygame.Surface, font: pygame.font.Font, clock: pygame.time.Clock, current_tick: int):
     """Rysuje informacje debugowe (FPS, Tick) w lewym górnym rogu."""
@@ -259,24 +534,25 @@ def main():
 
     agent_processes = []
     total_tanks = TEAM_A_NBR + TEAM_B_NBR
-    controller_script_path = os.path.join(current_dir, 'controller', 'server.py')
+    agent_script_path = os.path.join(current_dir, 'random_agent.py')
 
-    if not os.path.exists(controller_script_path):
-        print(f"BŁĄD: Nie znaleziono skryptu serwera agenta w: {controller_script_path}")
+    if not os.path.exists(agent_script_path):
+        print(f"BŁĄD: Nie znaleziono skryptu agenta w: {agent_script_path}")
         return
 
     # --- Inicjalizacja Gry ---
     game_loop = GameLoop(headless=False)
 
     try:
-        # 1. Uruchomienie serwerów agentów
+        # 1. Uruchomienie serwerów agentów (teraz używamy random_agent.py)
         print(f"Uruchamianie {total_tanks} serwerów agentów...")
         for i in range(total_tanks):
             port = AGENT_BASE_PORT + i
-            command = [sys.executable, controller_script_path, "--port", str(port)]
+            name = f"Bot_{i+1}"
+            command = [sys.executable, agent_script_path, "--port", str(port), "--name", name]
             proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             agent_processes.append(proc)
-            print(f"  -> Agent {i+1} uruchomiony na porcie {port} (PID: {proc.pid})")
+            print(f"  -> Agent '{name}' uruchomiony na porcie {port} (PID: {proc.pid})")
 
         print("\nOczekiwanie 3 sekundy na start serwerów agentów...")
         time.sleep(3)
@@ -285,43 +561,28 @@ def main():
         if not game_loop.initialize_game(map_seed=MAP_SEED):
             raise RuntimeError("Inicjalizacja pętli gry nie powiodła się!")
 
-        # --- DODAWANIE CZOŁGU TESTOWEGO ---
-        print("\n--- Dodawanie czołgu testowego ---")
-        test_tank_id = "tank_test_1"
-        test_tank_pos = Position(_x=1.0, _y=1.0)
-        # Używamy konstruktora z `start_pos` tak jak w `game_loop.py`
-        test_tank = LightTank(_id=test_tank_id, team=1, start_pos=test_tank_pos)
-        
-        game_loop.tanks[test_tank_id] = test_tank
-        if game_loop.map_info:
-            game_loop.map_info._all_tanks.append(test_tank)
-        game_loop.scoreboards[test_tank_id] = TankScoreboard(tank_id=test_tank_id, team=1)
-        print(f"  -> Dodano czołg testowy: {test_tank_id} na pozycji ({test_tank_pos.x}, {test_tank_pos.y})")
-
-        # WAŻNE: Zaktualizuj stan GameCore o nowo stworzone czołgi PRZED pętlą gry!
-        game_loop._update_team_counts()
-
         # 3. Inicjalizacja Pygame i okna 16:9
         pygame.init()
         map_engine_width, map_engine_height = game_loop.map_info._size
-        map_render_size = map_engine_width * SCALE
+        map_render_width = map_engine_width * SCALE
+        map_render_height = map_engine_height * SCALE
 
         # Ustaw rozmiar okna w proporcjach 16:9, aby zmieścić mapę i panele boczne
-        window_height = map_render_size + 100
+        window_height = map_render_height + 100
         window_width = int(window_height * 16 / 9)
 
         screen = pygame.display.set_mode((window_width, window_height))
         pygame.display.set_caption("Symulator Walk Czołgów")
         clock = pygame.time.Clock()
         assets = load_assets()
-        font = pygame.font.Font(None, 36)
+        font = pygame.font.Font(None, 42)
 
         # Utworzenie powierzchni do rysowania samej mapy
-        map_surface = pygame.Surface((map_render_size, map_render_size))
+        map_surface = pygame.Surface((map_render_width, map_render_height))
         map_rect = map_surface.get_rect(center=(window_width / 2, window_height / 2))
 
         # OPTYMALIZACJA: Pre-renderowanie statycznego tła mapy
-        background_surface = create_background_surface(game_loop.map_info, assets, SCALE, map_render_size, map_render_size)
+        background_surface = create_background_surface(game_loop.map_info, assets, SCALE, map_render_width, map_render_height)
 
         # --- Wyświetlanie informacji o spawnie ---
         print("\n--- Informacje o Spawnie ---")
@@ -361,10 +622,10 @@ def main():
             screen.fill(BACKGROUND_COLOR)
             map_surface.blit(background_surface, (0, 0)) # Narysuj tło na powierzchni mapy
             screen.blit(map_surface, map_rect) # Narysuj powierzchnię mapy na ekranie
-            draw_ui(screen, font, game_loop, window_width, map_rect) # Narysuj UI
+            draw_ui(screen, font, game_loop, window_width, map_rect, assets) # Narysuj UI
             draw_debug_info(screen, font, clock, 0) # Pokaż info debugowe
             pygame.display.flip()
-            clock.tick(30)
+            clock.tick(5)
 
         # Jeśli użytkownik zamknął okno w menu startowym, nie kontynuuj
         if not running:
@@ -377,6 +638,7 @@ def main():
             raise RuntimeError("Nie udało się uruchomić pętli w GameCore!")
 
         shot_effects = [] # Lista do przechowywania aktywnych efektów strzałów
+        explosion_particles = [] # Lista do przechowywania cząsteczek eksplozji
 
         # --- Główna Pętla Gry i Renderowania ---
         print("\n--- Rozpoczynanie pętli gry ---")
@@ -386,110 +648,125 @@ def main():
                 if event.type == pygame.QUIT:
                     running = False
 
-            # Sprawdzenie warunku końca gry
+            # --- KROK 1: Sprawdzenie warunku końca gry ---
             if not game_loop.game_core.can_continue_game():
                 running = False
                 continue
 
-            # --- KROK 1: Logika jednego ticka (replikacja z game_loop._process_game_tick) ---
-
-            tick_info = game_loop.game_core.process_tick()
+            # --- KROK 2: Wykonanie pełnego ticka silnika gry ---
+            # Ta jedna metoda załatwia wszystko: zapytania do agentów, fizykę, zgony.
+            tick_info = game_loop._process_game_tick()
             current_tick = tick_info["tick"]
 
-            if tick_info["sudden_death"]:
-                game_loop._apply_sudden_death_damage()
+            # --- KROK 3: Przetwarzanie wyników fizyki dla celów wizualnych ---
+            physics_results = game_loop.last_physics_results
+            agent_actions = getattr(game_loop, 'last_actions', {})
 
-            if tick_info["powerup_spawned"]:
-                game_loop._spawn_powerups()
+            # --- EFEKTY WIZUALNE STRZAŁÓW ---
 
-            sensor_data_map = game_loop._prepare_sensor_data()
-            agent_actions = game_loop._query_agents(sensor_data_map, current_tick)
+            # Przetwarzamy wszystkie udane trafienia z ostatniego ticka
+            for hit in physics_results.get("projectile_hits", []):
+                shooter_tank = game_loop.tanks.get(hit.shooter_id)
 
-            # --- KROK 2: Fizyka (replikacja z game_loop._process_physics) ---
+                # 1. Efekt wystrzału z lufy (stożek)
+                if shooter_tank:
+                    # Używamy tej samej logiki kąta co przy rysowaniu wieży, aby zapewnić spójność
+                    final_turret_angle = shooter_tank.heading - shooter_tank.barrel_angle
+                    
+                    # Wektor kierunku lufy. Grafika jest skierowana w górę (0, -1).
+                    barrel_direction = Vector2(0, -1).rotate(-final_turret_angle)
 
-            physics_results = {}
-            if game_loop.map_info:
-                actions_converted = {}
-                for tank_id, action_dict in agent_actions.items():
-                    try:
-                        ammo_to_load_str = action_dict.get("ammo_to_load")
-                        ammo_to_load_type = AmmoType[ammo_to_load_str] if ammo_to_load_str else None
-                        actions_converted[tank_id] = ActionCommand(
-                            barrel_rotation_angle=action_dict.get("barrel_rotation_angle", 0.0),
-                            heading_rotation_angle=action_dict.get("heading_rotation_angle", 0.0),
-                            move_speed=action_dict.get("move_speed", 0.0),
-                            ammo_to_load=ammo_to_load_type,
-                            should_fire=action_dict.get("should_fire", False)
-                        )
-                    except (KeyError, TypeError):
-                        # Ignoruj błędne akcje
-                        pass
+                    # Pozycja końca lufy
+                    tank_center_pos = Vector2(shooter_tank.position.x * SCALE, map_render_height - (shooter_tank.position.y * SCALE))
+                    barrel_length = (TILE_SIZE * SCALE) * 0.8 # Długość lufy jako przybliżenie
+                    barrel_tip_pos = tank_center_pos + barrel_direction * barrel_length
 
-                all_tanks_list = list(game_loop.tanks.values())
-                delta_time = 1.0 / TARGET_FPS
+                    generate_cone_explosion(
+                        particles_list=explosion_particles,
+                        position=barrel_tip_pos, # Poprawiony argument
+                        num_particles=30,
+                        base_direction_vector=barrel_direction, # Poprawiony argument
+                        cone_angle=25.0
+                    )
 
-                physics_results = process_physics_tick(
-                    all_tanks=all_tanks_list,
-                    actions=actions_converted,
-                    map_info=game_loop.map_info,
-                    delta_time=delta_time
-                )
+                # 2. Efekt trafienia (promienisty)
+                if hit.hit_position:
+                    hit_screen_pos = (hit.hit_position.x * SCALE, map_render_height - (hit.hit_position.y * SCALE))
+                    generate_radial_explosion(particles_list=explosion_particles, position=hit_screen_pos, num_particles=50)
 
-                # Przetwarzanie trafień do scoreboardu
-                for hit in physics_results.get("projectile_hits", []):
-                    if hit.hit_tank_id:
-                        # Znajdź strzelca (uproszczone, jak w oryginale)
-                        for tank_id, action in actions_converted.items():
-                            if action.should_fire:
-                                if tank_id in game_loop.scoreboards:
-                                    game_loop.scoreboards[tank_id].damage_dealt += hit.damage_dealt
-                                game_loop.last_attacker[hit.hit_tank_id] = tank_id
-                                # Dodaj efekt strzału do narysowania
-                                shooter_tank = game_loop.tanks.get(tank_id)
-                                if shooter_tank:
-                                    shot_effects.append({
-                                        "start": shooter_tank.position,
-                                        "end": hit.hit_position,
-                                        "life": 10 # Czas życia efektu w klatkach
-                                    })
-                                break
+                # 3. Efekt linii strzału
+                if shooter_tank and hit.hit_position:
+                    shot_effects.append({"start": shooter_tank.position, "end": hit.hit_position, "life": 10})
 
-            # --- KROK 3: Sprawdzenie zniszczeń i aktualizacja stanu ---
-            game_loop._check_death_conditions()
+            # --- KROK 3.5: Aktualizacja tła po zniszczeniu obiektów ---
+            destroyed_obstacle_ids = physics_results.get("destroyed_obstacles", [])
+            if destroyed_obstacle_ids:
+                grass_asset = assets['tiles'].get('Grass')
+                if grass_asset:
+                    # Iterujemy po wszystkich przeszkodach na mapie
+                    for obstacle in game_loop.map_info.obstacle_list:
+                        # Sprawdzamy, czy ID przeszkody jest na liście zniszczonych
+                        if obstacle._id in destroyed_obstacle_ids and not obstacle.is_alive:
+                            # Przeliczamy pozycję na koordynaty ekranu
+                            pos_x = obstacle._position.x * SCALE
+                            pos_y = map_render_height - (obstacle._position.y * SCALE)
+                            
+                            # Obliczamy lewy górny róg do rysowania
+                            top_left = (pos_x - grass_asset.get_width() / 2, pos_y - grass_asset.get_height() / 2)
+                            
+                            # Narysowujemy trawę na pre-renderowanym tle w miejscu zniszczonego drzewa
+                            background_surface.blit(grass_asset, top_left)
+                
+                # Czyścimy listę, aby nie przetwarzać jej ponownie w kolejnych klatkach
+                physics_results["destroyed_obstacles"].clear()
+
+            # --- KROK 4: Sprawdzenie zniszczeń i aktualizacja stanu ---
+            # game_loop._check_death_conditions() # Wyłączamy usuwanie, aby móc rysować wraki
             game_loop._update_team_counts()
 
-            # --- KROK 4: Renderowanie ---
+            # --- KROK 5: Renderowanie ---
             screen.fill(BACKGROUND_COLOR)
 
             # Rysuj tło na powierzchni mapy (czyści poprzednią klatkę)
             map_surface.blit(background_surface, (0, 0))
-
             # Rysowanie power-upów
             for powerup in game_loop.map_info.powerup_list:
-                asset = assets['powerups'].get(powerup.powerup_type.name)
+                asset_key = POWERUP_ASSET_MAP.get(powerup._powerup_type.name)
+                if not asset_key: continue
+                asset = assets['powerups'].get(asset_key)
                 if asset:
-                    pos_x = powerup.position.x * SCALE # Używamy SCALE, a nie map_render_size
-                    pos_y = powerup.position.y * SCALE
+                    # Odwracamy oś Y
+                    pos_x = powerup.position.x * SCALE
+                    pos_y = map_render_height - (powerup.position.y * SCALE)
                     top_left = (pos_x - asset.get_width() / 2, pos_y - asset.get_height() / 2)
                     map_surface.blit(asset, top_left)
 
             # Rysowanie czołgów
             for tank in game_loop.tanks.values():
-                draw_tank(map_surface, tank, assets, SCALE)
+                draw_tank(map_surface, tank, assets, SCALE, map_render_height)
 
             # Rysowanie i aktualizacja efektów strzałów
             remaining_shots = []
             for shot in shot_effects:
                 # Rysujemy na powierzchni mapy
-                draw_shot_effect(map_surface, shot['start'], shot['end'], shot['life'], SCALE)
+                draw_shot_effect(map_surface, shot['start'], shot['end'], shot['life'], SCALE, map_render_height)
                 shot['life'] -= 1
                 if shot['life'] > 0:
                     remaining_shots.append(shot)
             shot_effects = remaining_shots
 
+            # Rysowanie i aktualizacja cząsteczek eksplozji
+            remaining_particles = []
+            for particle in explosion_particles:
+                particle.update()
+                if particle.lifetime > 0:
+                    particle.draw(map_surface) # Rysujemy na powierzchni mapy
+                    remaining_particles.append(particle)
+            explosion_particles = remaining_particles
+
             # Rysowanie finalnej mapy na środku ekranu i UI po bokach
             screen.blit(map_surface, map_rect)
-            draw_ui(screen, font, game_loop, window_width, map_rect)
+            draw_ui(screen, font, game_loop, window_width, map_rect, assets)
             draw_debug_info(screen, font, clock, current_tick)
 
             pygame.display.flip()
@@ -526,7 +803,8 @@ def main():
 
     finally:
         # --- Sprzątanie ---
-        print("\n--- Zamykanie zasobów ---")
+        # Dodajemy pustą linię, aby nie nadpisać ostatniego logu z pętli
+        print("\n\n--- Zamykanie zasobów ---")
         game_loop.cleanup_game()
 
         print("Zamykanie serwerów agentów...")

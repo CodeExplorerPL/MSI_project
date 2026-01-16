@@ -6,9 +6,9 @@ from enum import Enum
 
 class AmmoType(Enum):
     """Definicja typów amunicji i ich bazowych właściwości."""
-    HEAVY = {"Value": -40, "Range": 5, "ReloadTime": 10.0}
-    LIGHT = {"Value": -20, "Range": 10, "ReloadTime": 5.0}
-    LONG_DISTANCE = {"Value": -25, "Range": 20, "ReloadTime": 10.0}
+    HEAVY = {"Value": -40, "Range": 100, "ReloadTime": 10.0}
+    LIGHT = {"Value": -20, "Range": 200, "ReloadTime": 5.0}
+    LONG_DISTANCE = {"Value": -25, "Range": 400, "ReloadTime": 10.0}
 
     @property
     def value_amount(self) -> int:

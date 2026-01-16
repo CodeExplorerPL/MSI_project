@@ -41,7 +41,7 @@ except ImportError as e:
 # --- Stałe Konfiguracyjne Grafiki ---
 LOG_LEVEL = "INFO"
 MAP_SEED = "map1.csv"
-TARGET_FPS = 5
+TARGET_FPS = 60
 SCALE = 2  # Współczynnik skalowania grafiki (wszystko będzie 2x większe)
 TILE_SIZE = 10  # To MUSI być zgodne z domyślną wartością w map_loader.py
 
@@ -180,7 +180,7 @@ def load_assets():
     for tank_type, folder_name in TANK_ASSET_MAP.items():
         try:
             base_path = os.path.join(TANK_ASSETS_PATH, folder_name)
-            # Grafiki czołgów są domyślnie skierowane na Północ (do góry).
+            # Grafiki czołgów są domyślnie skierowane w lewo.
             assets['tanks'][tank_type] = {
                 'body': pygame.transform.scale(pygame.image.load(os.path.join(base_path, 'tnk1.png')).convert_alpha(), tank_render_size),
                 'mask_body': pygame.transform.scale(pygame.image.load(os.path.join(base_path, 'msk1.png')).convert_alpha(), tank_render_size),
@@ -226,7 +226,8 @@ def draw_tank(surface: pygame.Surface, tank: Tank, assets: Dict, scale: int, map
 
     # Obrót: Kąty w silniku rosną zgodnie z zegarem, a w Pygame przeciwnie.
     # Dlatego obracamy o wartość ujemną.
-    rotated_body = pygame.transform.rotate(body_img, -tank.heading)
+    # Dodatkowe -90 stopni, ponieważ assety są skierowane w lewo (180 deg), a nie w górę (90 deg).
+    rotated_body = pygame.transform.rotate(body_img, -tank.heading - 180)
     body_rect = rotated_body.get_rect(center=center_pos)
     surface.blit(rotated_body, body_rect.topleft)
 
@@ -239,7 +240,7 @@ def draw_tank(surface: pygame.Surface, tank: Tank, assets: Dict, scale: int, map
     color_layer.fill(team_color) # Użyj koloru drużyny
     color_layer.blit(mask_body_img, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
     color_layer.set_colorkey((0, 0, 0))
-    rotated_mask = pygame.transform.rotate(color_layer, -tank.heading)
+    rotated_mask = pygame.transform.rotate(color_layer, -tank.heading - 180)
     surface.blit(rotated_mask, body_rect.topleft)
 
     # Wieżę rysujemy tylko dla żywych czołgów
@@ -248,7 +249,7 @@ def draw_tank(surface: pygame.Surface, tank: Tank, assets: Dict, scale: int, map
         turret_img = tank_assets['turret']
         # Kąt lufy jest względny do kadłuba, więc sumujemy kąty.
         total_turret_angle = tank.heading - tank.barrel_angle
-        rotated_turret = pygame.transform.rotate(turret_img, -total_turret_angle)
+        rotated_turret = pygame.transform.rotate(turret_img, -total_turret_angle - 180)
         turret_rect = rotated_turret.get_rect(center=center_pos)
         surface.blit(rotated_turret, turret_rect.topleft)
 
@@ -258,7 +259,7 @@ def draw_tank(surface: pygame.Surface, tank: Tank, assets: Dict, scale: int, map
         turret_color_layer.fill(team_color) # Użyj koloru drużyny
         turret_color_layer.blit(mask_turret_img, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
         turret_color_layer.set_colorkey((0, 0, 0))
-        rotated_turret_mask = pygame.transform.rotate(turret_color_layer, -total_turret_angle)
+        rotated_turret_mask = pygame.transform.rotate(turret_color_layer, -total_turret_angle - 180)
         surface.blit(rotated_turret_mask, turret_rect.topleft)
 
     # --- Pasek HP ---
@@ -576,6 +577,7 @@ def main():
         clock = pygame.time.Clock()
         assets = load_assets()
         font = pygame.font.Font(None, 42)
+        start_font = pygame.font.Font(None, 72)
 
         # Utworzenie powierzchni do rysowania samej mapy
         map_surface = pygame.Surface((map_render_width, map_render_height))
@@ -624,8 +626,20 @@ def main():
             screen.blit(map_surface, map_rect) # Narysuj powierzchnię mapy na ekranie
             draw_ui(screen, font, game_loop, window_width, map_rect, assets) # Narysuj UI
             draw_debug_info(screen, font, clock, 0) # Pokaż info debugowe
+
+            # --- DODANE: Pulsujący napis "Press SPACE to start" ---
+            # Używamy sinusa do uzyskania płynnej pulsacji alpha (przezroczystości)
+            pulse_speed = 0.005
+            alpha = 128 + 127 * math.sin(pygame.time.get_ticks() * pulse_speed)
+            
+            start_text_surf = start_font.render("Press SPACE to start", True, (255, 255, 255))
+            start_text_surf.set_alpha(alpha)
+            
+            start_text_rect = start_text_surf.get_rect(center=(window_width / 2, window_height / 2))
+            screen.blit(start_text_surf, start_text_rect)
+
             pygame.display.flip()
-            clock.tick(5)
+            clock.tick(16) # Zwiększamy tickrate dla płynniejszej animacji napisu
 
         # Jeśli użytkownik zamknął okno w menu startowym, nie kontynuuj
         if not running:
@@ -667,31 +681,44 @@ def main():
             # Przetwarzamy wszystkie udane trafienia z ostatniego ticka
             for hit in physics_results.get("projectile_hits", []):
                 shooter_tank = game_loop.tanks.get(hit.shooter_id)
+                
+                # Przelicz pozycję trafienia na koordynaty ekranu
+                hit_screen_pos = None
+                if hit.hit_position:
+                    hit_screen_pos = Vector2(hit.hit_position.x * SCALE, map_render_height - (hit.hit_position.y * SCALE))
 
                 # 1. Efekt wystrzału z lufy (stożek)
                 if shooter_tank:
                     # Używamy tej samej logiki kąta co przy rysowaniu wieży, aby zapewnić spójność
                     final_turret_angle = shooter_tank.heading - shooter_tank.barrel_angle
                     
-                    # Wektor kierunku lufy. Grafika jest skierowana w górę (0, -1).
-                    barrel_direction = Vector2(0, -1).rotate(-final_turret_angle)
+                    # Wektor kierunku lufy (wizualny, na podstawie kąta czołgu)
+                    visual_barrel_direction = Vector2(0, -1).rotate(-final_turret_angle)
 
                     # Pozycja końca lufy
                     tank_center_pos = Vector2(shooter_tank.position.x * SCALE, map_render_height - (shooter_tank.position.y * SCALE))
                     barrel_length = (TILE_SIZE * SCALE) * 0.8 # Długość lufy jako przybliżenie
-                    barrel_tip_pos = tank_center_pos + barrel_direction * barrel_length
+                    barrel_tip_pos = tank_center_pos + visual_barrel_direction * barrel_length
+                    
+                    # Kierunek stożka oparty na faktycznym torze lotu (raycast)
+                    # Jeśli jest punkt trafienia, użyj go do precyzyjnego określenia kierunku.
+                    # W przeciwnym razie (np. pocisk zniknął w powietrzu), użyj kierunku wizualnego.
+                    cone_direction = visual_barrel_direction
+                    if hit_screen_pos:
+                        raycast_vector = hit_screen_pos - barrel_tip_pos
+                        if raycast_vector.length() > 0:
+                            cone_direction = raycast_vector.normalize()
 
                     generate_cone_explosion(
                         particles_list=explosion_particles,
-                        position=barrel_tip_pos, # Poprawiony argument
+                        position=barrel_tip_pos,
                         num_particles=30,
-                        base_direction_vector=barrel_direction, # Poprawiony argument
+                        base_direction_vector=cone_direction,
                         cone_angle=25.0
                     )
 
                 # 2. Efekt trafienia (promienisty)
-                if hit.hit_position:
-                    hit_screen_pos = (hit.hit_position.x * SCALE, map_render_height - (hit.hit_position.y * SCALE))
+                if hit_screen_pos:
                     generate_radial_explosion(particles_list=explosion_particles, position=hit_screen_pos, num_particles=50)
 
                 # 3. Efekt linii strzału

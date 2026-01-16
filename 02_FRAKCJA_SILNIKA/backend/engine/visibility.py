@@ -1,7 +1,7 @@
 """
 System widzenia czołgów
 
-Przeszkody póki co nie zasłaniają innych obiektów.
+Przeszkody blokują widoczność (chyba że są przezierne jak AntiTankSpike).
 """
 
 import math
@@ -29,7 +29,7 @@ def calculate_distance(pos1: Position, pos2: Position) -> float:
     """Oblicza odległość euklidesową."""
     dx = pos2.x - pos1.x
     dy = pos2.y - pos1.y
-    return math.sqrt(dx * dx + dy * dy)
+    return math.hypot(dx, dy)
 
 
 def calculate_angle_to_target(from_pos: Position, to_pos: Position) -> float:
@@ -71,6 +71,89 @@ def is_in_vision_cone(
     view_direction = normalize_angle(tank_heading + tank_barrel)
     angle_diff = abs(normalize_angle(angle_to_target - view_direction))
     return angle_diff <= vision_angle / 2.0
+
+
+def check_segment_aabb_intersection(
+    start: Position,
+    end: Position,
+    box_center: Position,
+    box_size: List[int]
+) -> bool:
+    """Sprawdza czy odcinek przecina prostokąt (AABB)."""
+    half_w = box_size[0] / 2.0
+    half_h = box_size[1] / 2.0
+    
+    min_x = box_center.x - half_w
+    max_x = box_center.x + half_w
+    min_y = box_center.y - half_h
+    max_y = box_center.y + half_h
+
+    dx = end.x - start.x
+    dy = end.y - start.y
+
+    if abs(dx) < 1e-9:
+        if start.x < min_x or start.x > max_x:
+            return False
+        t_min_x = float('-inf')
+        t_max_x = float('inf')
+    else:
+        t1 = (min_x - start.x) / dx
+        t2 = (max_x - start.x) / dx
+        t_min_x = min(t1, t2)
+        t_max_x = max(t1, t2)
+
+    if abs(dy) < 1e-9:
+        if start.y < min_y or start.y > max_y:
+            return False
+        t_min_y = float('-inf')
+        t_max_y = float('inf')
+    else:
+        t1 = (min_y - start.y) / dy
+        t2 = (max_y - start.y) / dy
+        t_min_y = min(t1, t2)
+        t_max_y = max(t1, t2)
+
+    t_enter = max(t_min_x, t_min_y)
+    t_exit = min(t_max_x, t_max_y)
+
+    if t_enter > t_exit:
+        return False
+        
+    if t_exit < 0:
+        return False
+        
+    if t_enter > 1:
+        return False
+        
+    return True
+
+
+def is_line_of_sight_blocked(
+    start_pos: Position,
+    end_pos: Position,
+    obstacles: List[ObstacleUnion],
+    ignore_id: Union[str, None] = None
+) -> bool:
+    """Sprawdza czy linia widzenia jest zablokowana przez nieprzezierne przeszkody."""
+    for obstacle in obstacles:
+        if not obstacle.is_alive:
+            continue
+            
+        if ignore_id and obstacle._id == ignore_id:
+            continue
+
+        # Sprawdzenie czy przeszkoda jest przezierna
+        # W final_api.py konkretne klasy (Wall, Tree, AntiTankSpike) definiują obstacle_type
+        if hasattr(obstacle, "obstacle_type") and obstacle.obstacle_type.value.get("see_through", False):
+            continue
+            
+        pos = getattr(obstacle, "_position", getattr(obstacle, "position", None))
+        size = getattr(obstacle, "_size", getattr(obstacle, "size", None))
+        
+        if pos and size and check_segment_aabb_intersection(start_pos, end_pos, pos, size):
+            return True
+            
+    return False
 
 
 def check_visibility(
@@ -122,11 +205,14 @@ def check_visibility(
         ):
             continue
 
+        if is_line_of_sight_blocked(origin, other_tank.position, obstacles):
+            continue
+
         seen_tanks.append(
             SeenTank(
-                id=other_tank._id,
-                team=other_tank._team,
-                tank_type=other_tank._tank_type,
+                _id=other_tank._id,
+                _team=other_tank._team,
+                _tank_type=other_tank._tank_type,
                 position=other_tank.position,
                 is_damaged=other_tank.hp < 0.3 * other_tank._max_hp,
                 heading=other_tank.heading,
@@ -150,7 +236,8 @@ def check_visibility(
             tank._vision_angle,
             angle_to_target
         ):
-            seen_powerups.append(powerup)
+            if not is_line_of_sight_blocked(origin, powerup._position, obstacles):
+                seen_powerups.append(powerup)
 
     # =========================
     # PRZESZKODY
@@ -170,7 +257,8 @@ def check_visibility(
             tank._vision_angle,
             angle_to_target
         ):
-            seen_obstacles.append(obstacle)
+            if not is_line_of_sight_blocked(origin, obstacle._position, obstacles, ignore_id=obstacle._id):
+                seen_obstacles.append(obstacle)
 
     # =========================
     # TERENY
@@ -187,7 +275,8 @@ def check_visibility(
             tank._vision_angle,
             angle_to_target
         ):
-            seen_terrains.append(terrain)
+            if not is_line_of_sight_blocked(origin, terrain._position, obstacles):
+                seen_terrains.append(terrain)
 
     return TankSensorData(
         seen_tanks=seen_tanks,

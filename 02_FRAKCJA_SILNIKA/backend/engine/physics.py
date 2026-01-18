@@ -62,6 +62,7 @@ class CollisionResult:
 @dataclass
 class ProjectileHit:
     """Informacja o trafieniu pocisku."""
+    shooter_id: Optional[str] = None
     hit_tank_id: Optional[str] = None
     hit_obstacle_id: Optional[str] = None
     damage_dealt: int = 0
@@ -261,7 +262,7 @@ def fire_projectile(
     obstacles: List[ObstacleUnion]
 ) -> Optional[ProjectileHit]:
     """
-    Wykonuje strzał z czołgu.
+    Wykonuje strzał z czołgu, znajdując najbliższy trafiony obiekt.
     """
     if not can_fire(tank):
         return None
@@ -279,29 +280,33 @@ def fire_projectile(
     # Zasięg strzału - pobieramy z enum value dict
     ammo_range = ammo.value.get("Range", math.inf) if ammo else math.inf
     closest_hit_distance = ammo_range
-    hit = None
+    final_hit: Optional[ProjectileHit] = None
 
+    # Sprawdź trafienia w inne czołgi
     for target in all_tanks:
-        if target._id == tank._id:
+        if target._id == tank._id or not target.is_alive():
             continue
 
         dist = calculate_distance(tank.position, target.position)
-        if dist > closest_hit_distance:
+        if dist >= closest_hit_distance:
             continue
 
-        angle = math.degrees(math.atan2(
+        angle_to_target = math.degrees(math.atan2(
             target.position.y - tank.position.y,
             target.position.x - tank.position.x
         ))
 
-        if abs(normalize_angle(angle - shoot_direction)) <= 5:
+        if abs(normalize_angle(angle_to_target - shoot_direction)) <= 5:
             closest_hit_distance = dist
-            hit = ProjectileHit(
+            final_hit = ProjectileHit(
+                shooter_id=tank._id,
                 hit_tank_id=target._id,
+                hit_obstacle_id=None,
                 damage_dealt=damage,
                 hit_position=target.position
             )
 
+    # Sprawdź trafienia w przeszkody
     for obstacle in obstacles:
         if not obstacle.is_alive:
             continue
@@ -311,23 +316,34 @@ def fire_projectile(
             continue
 
         dist = calculate_distance(tank.position, obstacle_pos)
-        if dist < closest_hit_distance:
-            angle = math.degrees(math.atan2(
+        if dist >= closest_hit_distance:
+            continue
+        
+        angle_to_target = math.degrees(math.atan2(
                 obstacle_pos.y - tank.position.y,
                 obstacle_pos.x - tank.position.x
             ))
 
-            if abs(normalize_angle(angle - shoot_direction)) <= 5:
+        if abs(normalize_angle(angle_to_target - shoot_direction)) <= 5:
+            closest_hit_distance = dist
+            final_hit = ProjectileHit(
+                shooter_id=tank._id,
+                hit_tank_id=None,
+                hit_obstacle_id=getattr(obstacle, "id", getattr(obstacle, "_id", None)),
+                damage_dealt=damage,
+                hit_position=obstacle_pos
+            )
+
+    # Jeśli ostatecznie trafiono w przeszkodę, oznacz ją jako zniszczoną (jeśli to możliwe)
+    if final_hit and final_hit.hit_obstacle_id:
+        for obstacle in obstacles:
+            obs_id = getattr(obstacle, "id", getattr(obstacle, "_id", None))
+            if obs_id == final_hit.hit_obstacle_id:
                 if obstacle.is_destructible:
                     obstacle.is_alive = False
-                return ProjectileHit(
-                    hit_obstacle_id=getattr(obstacle, "id", getattr(obstacle, "_id", None)),
-                    damage_dealt=damage,
-                    hit_position=obstacle_pos
-                )
+                break
 
-    return hit
-
+    return final_hit
 
 # ============================================================
 # OBRAŻENIA
@@ -350,8 +366,8 @@ def check_powerup_pickup(
     """Sprawdza, czy czołg jest na powerupie i może go podnieść."""
     for powerup in powerups:
         if rectangles_overlap(
-            tank.position, get_tank_size(tank),
-            powerup.position, powerup.size
+            tank.position, get_tank_size(tank), # type: ignore
+            powerup._position, powerup._size # type: ignore
         ):
             return powerup
     return None
@@ -359,7 +375,7 @@ def check_powerup_pickup(
 
 def apply_powerup(tank: TankUnion, powerup: PowerUpData) -> None:
     """Aplikuje efekt powerupu na czołg."""
-    ptype = powerup.powerup_type
+    ptype = powerup._powerup_type
     value = powerup.value
 
     if ptype == PowerUpType.MEDKIT:
@@ -372,7 +388,8 @@ def apply_powerup(tank: TankUnion, powerup: PowerUpData) -> None:
         tank.is_overcharged = True
 
     else:
-        ammo_name = powerup.ammo_type or ptype.value.get("AmmoType")
+        # powerup.ammo_type nie istnieje w strukturze PowerUpData
+        ammo_name = ptype.value.get("AmmoType")
         if not ammo_name:
             return
         ammo_type = AmmoType[ammo_name]
@@ -419,8 +436,8 @@ def process_physics_tick(
         if not action:
             continue
 
-        rotate_heading(tank, action.heading_rotation_angle, delta_time)
-        rotate_barrel(tank, action.barrel_rotation_angle, delta_time)
+        rotate_heading(tank, action.heading_rotation_angle)
+        rotate_barrel(tank, action.barrel_rotation_angle)
         try_load_ammo(tank, action.ammo_to_load)
 
     for tank in all_tanks:

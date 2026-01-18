@@ -41,11 +41,11 @@ Configurable Team Sizes:
 import random
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, cast
 
 import httpx
 
-from ..structures import MapInfo, Position
+from ..structures import MapInfo, Position, PowerUpData, PowerUpType
 from ..tank.base_tank import Tank
 from ..tank.heavy_tank import HeavyTank
 from ..tank.light_tank import LightTank
@@ -55,7 +55,7 @@ from ..utils.logger import GameEventType, get_logger
 
 from .game_core import GameCore, create_default_game
 from .map_loader import MapLoader
-from .physics import process_physics_tick, apply_damage
+from .physics import process_physics_tick, apply_damage, rectangles_overlap
 from .visibility import check_visibility
 
 # Type alias for tank union
@@ -131,9 +131,12 @@ class GameLoop:
         # Scoreboard tracking
         self.scoreboards: Dict[str, TankScoreboard] = {}
         self.last_attacker: Dict[str, str] = {}  # Maps tank_id -> last attacker tank_id
+        self.processed_deaths: set[str] = set() # Śledzi czołgi, których śmierć została już przetworzona
         
         # HTTP client for agent communication
         self.http_client: Optional[httpx.Client] = None
+        self.last_physics_results: Dict[str, list] = {}
+        self.last_actions: Dict[str, Any] = {}
 
         # Performance metrics
         self.tick_start_time = 0.0
@@ -511,18 +514,22 @@ class GameLoop:
         # Proportional constants based on an original 500x500 map design
         X_MARGIN_RATIO = 0.1  # 50 / 500
         Y_MARGIN_RATIO = 0.1  # 50 / 500
-        X_SPACING_RATIO = 0.03 # 15 / 500
+        X_SPACING_RATIO = 0.04 # 15 / 500
         Y_SPACING_RATIO = 0.04 # 20 / 500
         RIGHT_MARGIN_RATIO = 0.2 # 100 / 500
 
+        # Offset do centrowania czołgów na kafelkach (zakładając TILE_SIZE=10).
+        # Zapobiega to spawnowaniu na liniach siatki.
+        offset = 5.0
+
         if team == 1:
             # Team 1 spawns on left side
-            x = map_width * X_MARGIN_RATIO + (index * map_width * X_SPACING_RATIO)
-            y = map_height * Y_MARGIN_RATIO + (index * map_height * Y_SPACING_RATIO)
+            x = map_width * X_MARGIN_RATIO + (index * map_width * X_SPACING_RATIO) + offset
+            y = map_height * Y_MARGIN_RATIO + (index * map_height * Y_SPACING_RATIO) + offset
         else:
             # Team 2 spawns on right side
-            x = map_width * (1 - RIGHT_MARGIN_RATIO) + (index * map_width * X_SPACING_RATIO)
-            y = map_height * Y_MARGIN_RATIO + (index * map_height * Y_SPACING_RATIO)
+            x = map_width * (1 - RIGHT_MARGIN_RATIO) + (index * map_width * X_SPACING_RATIO) + offset
+            y = map_height * Y_MARGIN_RATIO + (index * map_height * Y_SPACING_RATIO) + offset
 
         # Clamp positions to be safely within map boundaries
         margin = 5.0 # A small margin to avoid spawning exactly on the edge
@@ -580,28 +587,60 @@ class GameLoop:
 
     def _apply_sudden_death_damage(self):
         """Aplikuje obrażenia nagłej śmierci wszystkim czołgom."""
-        damage = abs(self.game_core.get_sudden_death_damage())
+        damage = self.game_core.get_sudden_death_damage()
 
         for tank_id, tank in self.tanks.items():
             if tank.is_alive():
-                apply_damage(tank, damage)
+                apply_damage(tank, abs(damage))
 
         self.logger.debug(f"Applied sudden death damage: {damage} to all tanks")
 
     def _spawn_powerups(self):
         """Spawn power-upów zgodnie z zasadami."""
-        powerup_config = self.game_core.get_powerup_config()
-
-        # Check if we hit max powerups
-        if self.map_info and len(self.map_info.powerup_list) >= powerup_config["max_powerups"]:
+        if not self.map_info:
             return
 
-        # TODO: Implement actual powerup spawning
-        # For now, powerups are not spawned dynamically
+        powerup_config = self.game_core.get_powerup_config()
+        map_config = self.game_core.get_map_config()
+        map_width, map_height = map_config["width"], map_config["height"]
+        powerup_size = map_config.get("powerup_size", [2, 2])
 
-        self.logger.log_powerup_action(
-            "powerup_new", "spawn", {"type": "random", "count": len(self.map_info.powerup_list) if self.map_info else 0}
-        )
+        # Check if we hit max powerups
+        if len(self.map_info.powerup_list) >= powerup_config["max_powerups"]:
+            return
+
+        # Try to find a valid spawn location
+        for _ in range(50):  # 50 attempts to find a spot
+            pos_x = random.uniform(powerup_size[0], map_width - powerup_size[0])
+            pos_y = random.uniform(powerup_size[1], map_height - powerup_size[1])
+            candidate_pos = Position(pos_x, pos_y)
+
+            # Check for collisions with obstacles, tanks, and other powerups
+            collision = False
+            all_collidables = self.map_info.obstacle_list + list(self.tanks.values()) + self.map_info.powerup_list
+
+            for obj in all_collidables:
+                obj_pos = getattr(obj, "_position", obj.position)
+                obj_size = getattr(obj, "_size", obj.size)
+                if rectangles_overlap(candidate_pos, powerup_size, obj_pos, obj_size):
+                    collision = True
+                    break
+            if collision:
+                continue
+
+            # Spot is good, create and spawn the powerup
+            powerup_type_enum = random.choice(list(PowerUpType))
+            new_powerup = PowerUpData(_position=candidate_pos, _powerup_type=powerup_type_enum, _size=powerup_size)
+
+            self.map_info.powerup_list.append(new_powerup)
+
+            # Print to console as requested
+            print(f"[INFO] Power-up spawned: {new_powerup._powerup_type.name} at ({new_powerup._position.x:.1f}, {new_powerup._position.y:.1f})")
+
+            self.logger.log_powerup_action("powerup_new", "spawn", {"type": new_powerup._powerup_type.name, "position": (new_powerup._position.x, new_powerup._position.y)})
+            return  # Exit after successful spawn
+
+        self.logger.warning("Failed to find a valid spot to spawn a power-up after 50 attempts.")
 
     def _prepare_sensor_data(self) -> Dict[str, Any]:
         """
@@ -801,11 +840,12 @@ class GameLoop:
                 self.logger.warning(f"Failed to parse action for {tank_id}: {e}")
 
         # Process physics tick
+        self.last_actions = actions_converted  # Store actions for renderer
         all_tanks_list = list(self.tanks.values())
         delta_time = 1.0 / 60.0  # Assuming 60 FPS
 
         try:
-            results = process_physics_tick(
+            self.last_physics_results = process_physics_tick(
                 all_tanks=all_tanks_list,
                 actions=actions_converted,
                 map_info=self.map_info,
@@ -813,7 +853,7 @@ class GameLoop:
             )
 
             # Update scoreboards based on projectile hits
-            for hit in results.get("projectile_hits", []):
+            for hit in self.last_physics_results.get("projectile_hits", []):
                 if hit.hit_tank_id:
                     # Find who fired (the tank whose action caused this)
                     for tank_id, action in actions_converted.items():
@@ -826,7 +866,7 @@ class GameLoop:
                             break
 
             # Log destroyed tanks
-            for tank_id in results.get("destroyed_tanks", []):
+            for tank_id in self.last_physics_results.get("destroyed_tanks", []):
                 self.logger.log_tank_action(tank_id, "destroyed", {})
 
         except Exception as e:
@@ -836,33 +876,36 @@ class GameLoop:
 
     def _check_death_conditions(self):
         """Sprawdzenie warunków śmierci czołgów i powiadamianie agentów."""
-        tanks_to_remove = []
+        newly_dead_tanks = []
 
         for tank_id, tank in self.tanks.items():
-            if not tank.is_alive():
-                tanks_to_remove.append(tank_id)
+            # Przetwarzaj śmierć czołgu tylko raz
+            if not tank.is_alive() and tank_id not in self.processed_deaths:
+                newly_dead_tanks.append(tank_id)
+                self.processed_deaths.add(tank_id)
                 
-                # Credit kill to last attacker
+                # Zapisz zabójstwo dla atakującego
                 attacker_id = self.last_attacker.get(tank_id)
                 if attacker_id and attacker_id in self.scoreboards:
                     self.scoreboards[attacker_id].tanks_killed += 1
-                    self.logger.info(
-                        f"Tank {tank_id} destroyed by {attacker_id}"
-                    )
+                    self.logger.info(f"Tank {tank_id} destroyed by {attacker_id}")
 
-                # Notify agent of destruction
+                # Powiadom agenta o zniszczeniu
                 self._notify_agent_destroyed(tank_id)
 
-                self.logger.log_tank_action(
-                    tank_id, "death", {"final_hp": tank.hp}
-                )
+                self.logger.log_tank_action(tank_id, "death", {"final_hp": tank.hp})
 
-        # Remove dead tanks
-        for tank_id in tanks_to_remove:
-            del self.tanks[tank_id]
-            # Also remove from map_info
+        # W trybie headless usuwamy czołgi z symulacji.
+        # W trybie graficznym zostawiamy je, aby można było narysować wraki.
+        if self.headless and newly_dead_tanks:
+            for tank_id in newly_dead_tanks:
+                if tank_id in self.tanks:
+                    del self.tanks[tank_id]
+            
+            # Usuń także z listy w map_info, naprawiając błąd AttributeError
             if self.map_info:
-                self.map_info.all_tanks = [t for t in self.map_info.all_tanks if t._id != tank_id]
+                # Modyfikujemy wewnętrzną listę `_all_tanks` zamiast publicznej właściwości
+                self.map_info._all_tanks = [t for t in self.map_info._all_tanks if t._id not in newly_dead_tanks]
 
     def _notify_agent_destroyed(self, tank_id: str):
         """
@@ -950,6 +993,8 @@ class GameLoop:
         self.agent_connections.clear()
         self.scoreboards.clear()
         self.last_attacker.clear()
+        self.processed_deaths.clear()
+        self.last_actions.clear()
 
     def _update_performance_metrics(self, tick_duration: float):
         """Aktualizacja metryk wydajności."""

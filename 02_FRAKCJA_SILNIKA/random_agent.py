@@ -53,13 +53,31 @@ class ActionCommand(BaseModel):
 # ============================================================================
 
 class RandomAgent:
-    """Simple random agent that walks and shoots randomly."""
+    """
+    Agent with more structured, stateful behavior for testing purposes.
+    Drives in one direction for a while, then changes.
+    Scans with its turret.
+    """
     
-    def __init__(self, name: str = "RandomBot"):
+    def __init__(self, name: str = "TestBot"):
         self.name = name
-        self.tick_count = 0
         self.is_destroyed = False
         print(f"[{self.name}] Agent initialized")
+
+        # State for movement
+        self.move_timer = 0
+        self.current_move_speed = 0.0
+
+        # State for hull rotation
+        self.heading_timer = 0
+        self.current_heading_rotation = 0.0
+
+        # State for barrel scanning
+        self.barrel_scan_direction = 1.0  # 1.0 for right, -1.0 for left
+        self.barrel_rotation_speed = 15.0
+
+        # State for aiming before shooting
+        self.aim_timer = 0  # Ticks to wait before firing
     
     def get_action(
         self, 
@@ -68,28 +86,56 @@ class RandomAgent:
         sensor_data: Dict[str, Any], 
         enemies_remaining: int
     ) -> ActionCommand:
-        """Generate random action each tick."""
-        self.tick_count += 1
+        """Generate a stateful, predictable action for testing."""
+        should_fire = False
+        heading_rotation = 0.0
+        barrel_rotation = 0.0
         
-        # Random rotation for barrel and heading
-        barrel_rot = random.uniform(-30.0, 30.0)
-        heading_rot = random.uniform(-15.0, 15.0)
-        
-        # Random speed (mostly forward)
-        speed = random.uniform(-1.0, 3.0)
-        
-        # Random shooting (10% chance each tick)
-        should_fire = random.random() < 0.1
-        
-        # Log every 100 ticks
-        if self.tick_count % 100 == 0:
-            print(f"[{self.name}] Tick {current_tick}: enemies={enemies_remaining}, " +
-                  f"hp={my_tank_status.get('hp', '?')}")
+        if self.aim_timer > 0:
+            # --- AIMING PHASE ---
+            self.aim_timer -= 1
+            
+            # Stop all rotation while aiming
+            heading_rotation = 0.0
+            barrel_rotation = 0.0
+            
+            # Fire on the last tick of aiming
+            if self.aim_timer == 0:
+                should_fire = True
+        else:
+            # --- NORMAL OPERATION PHASE ---
+
+            # --- Hull Rotation Logic ---
+            self.heading_timer -= 1
+            if self.heading_timer <= 0:
+                self.current_heading_rotation = random.choice([-15.0, 0, 15.0])
+                self.heading_timer = random.randint(30, 90)
+            heading_rotation = self.current_heading_rotation
+
+            # --- Barrel Scanning Logic ---
+            barrel_angle = my_tank_status.get("barrel_angle", 0.0)
+            if barrel_angle > 45.0:
+                self.barrel_scan_direction = -1.0  # Scan left
+            elif barrel_angle < -45.0:
+                self.barrel_scan_direction = 1.0  # Scan right
+            barrel_rotation = self.barrel_rotation_speed * self.barrel_scan_direction
+
+            # --- Shooting Decision ---
+            # Decide if we should start aiming
+            wants_to_shoot = random.random() < (0.1 if sensor_data.get("seen_tanks") else 0.01)
+            if wants_to_shoot:
+                self.aim_timer = 10  # Start aiming for 10 ticks
+
+        # --- Movement Logic (independent of aiming) ---
+        self.move_timer -= 1
+        if self.move_timer <= 0:
+            self.current_move_speed = random.choice([3.0, 3.0, 0.0, -1.0])
+            self.move_timer = random.randint(60, 180)
         
         return ActionCommand(
-            barrel_rotation_angle=barrel_rot,
-            heading_rotation_angle=heading_rot,
-            move_speed=speed,
+            barrel_rotation_angle=barrel_rotation,
+            heading_rotation_angle=heading_rotation,
+            move_speed=self.current_move_speed,
             should_fire=should_fire
         )
     

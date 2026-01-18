@@ -171,6 +171,7 @@ def move_tank(
 
     terrain = get_terrain_at_position(tank.position, terrains)
     modifier = 1.0
+    # Terrain damage is applied in process_physics_tick for the final position.
     damage = 0
     if terrain:
         modifier = getattr(terrain, "movement_speed_modifier", getattr(terrain, "_movement_speed_modifier", 1.0))
@@ -185,6 +186,17 @@ def move_tank(
     )
 
     return new_position, damage
+
+
+def _terrain_damage_at_position(
+    position: Position,
+    terrains: List[TerrainUnion]
+) -> int:
+    """Returns terrain damage dealt per tick at the given position."""
+    terrain = get_terrain_at_position(position, terrains)
+    if not terrain:
+        return 0
+    return int(getattr(terrain, "deal_damage", getattr(terrain, "_deal_damage", 0)) or 0)
 
 
 # ============================================================
@@ -465,12 +477,72 @@ def process_physics_tick(
         if not action or action.move_speed == 0:
             continue
 
-        new_pos, dmg = move_tank(
+        old_pos = tank.position
+        new_pos, _ = move_tank(
             tank, action.move_speed,
             map_info.terrain_list, delta_time
         )
+
+        # Apply movement tentatively, then validate collisions.
         tank.position = new_pos
 
+        # Boundary collision -> rollback
+        map_size = getattr(map_info, "size", getattr(map_info, "_size", None))
+        if map_size and check_tank_boundary_collision(tank, map_size):
+            tank.position = old_pos
+            results["collisions"].append(
+                {
+                    "type": CollisionType.TANK_BOUNDARY.value,
+                    "tank_id": tank._id,
+                }
+            )
+            continue
+
+        # Obstacle collision -> rollback
+        hit_obstacle = check_tank_obstacle_collision(tank, map_info.obstacle_list)
+        if hit_obstacle is not None:
+            tank.position = old_pos
+            obstacle_type = getattr(hit_obstacle, "obstacle_type", getattr(hit_obstacle, "_obstacle_type", None))
+            collision_type = CollisionType.TANK_WALL
+            if obstacle_type == ObstacleType.TREE:
+                collision_type = CollisionType.TANK_TREE
+            elif obstacle_type == ObstacleType.ANTI_TANK_SPIKE:
+                collision_type = CollisionType.TANK_SPIKE
+
+            results["collisions"].append(
+                {
+                    "type": collision_type.value,
+                    "tank_id": tank._id,
+                    "obstacle_id": getattr(hit_obstacle, "id", getattr(hit_obstacle, "_id", None)),
+                }
+            )
+            continue
+
+        # Tank-tank collision -> rollback (simple resolution)
+        collided_with: Optional[str] = None
+        for other in all_tanks:
+            if other._id == tank._id or other.hp <= 0:
+                continue
+            if check_tank_tank_collision(tank, other):
+                collided_with = other._id
+                break
+
+        if collided_with is not None:
+            tank.position = old_pos
+            results["collisions"].append(
+                {
+                    "type": CollisionType.TANK_TANK_MOVING.value,
+                    "tank_id": tank._id,
+                    "other_tank_id": collided_with,
+                }
+            )
+            continue
+
+    # Terrain damage (per tick) for all alive tanks based on final position.
+    for tank in all_tanks:
+        if tank.hp <= 0:
+            continue
+        dmg = _terrain_damage_at_position(tank.position, map_info.terrain_list)
         if dmg and apply_damage(tank, dmg):
             results["destroyed_tanks"].append(tank._id)
 

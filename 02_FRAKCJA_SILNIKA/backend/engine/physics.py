@@ -501,13 +501,37 @@ def process_physics_tick(
         # Obstacle collision -> rollback
         hit_obstacle = check_tank_obstacle_collision(tank, map_info.obstacle_list)
         if hit_obstacle is not None:
+            # Jeśli czołg już był w kolizji na starej pozycji (np. zespawnował się w ścianie),
+            # nie naliczaj obrażeń co tick – obrażenia powinny być "za wejście" w przeszkodę.
+            was_colliding_before_move = False
+            for obstacle in map_info.obstacle_list:
+                if not obstacle.is_alive:
+                    continue
+                obstacle_position = getattr(obstacle, "position", getattr(obstacle, "_position", None))
+                obstacle_size = getattr(obstacle, "size", getattr(obstacle, "_size", [0, 0]))
+                if obstacle_position and rectangles_overlap(old_pos, get_tank_size(tank), obstacle_position, obstacle_size):
+                    was_colliding_before_move = True
+                    break
+
             tank.position = old_pos
             obstacle_type = getattr(hit_obstacle, "obstacle_type", getattr(hit_obstacle, "_obstacle_type", None))
             collision_type = CollisionType.TANK_WALL
             if obstacle_type == ObstacleType.TREE:
                 collision_type = CollisionType.TANK_TREE
+                # Spec: Zderzenie czołgu z drzewem: -10 HP (drzewo jest niszczone)
+                if not was_colliding_before_move:
+                    if apply_damage(tank, 10):
+                        results["destroyed_tanks"].append(tank._id)
+                    if getattr(hit_obstacle, "is_destructible", False):
+                        hit_obstacle.is_alive = False
+                        results["destroyed_obstacles"].append(getattr(hit_obstacle, "id", getattr(hit_obstacle, "_id", None)))
             elif obstacle_type == ObstacleType.ANTI_TANK_SPIKE:
                 collision_type = CollisionType.TANK_SPIKE
+            else:
+                # Spec: Zderzenie czołgu ze ścianą: -25 HP
+                if not was_colliding_before_move:
+                    if apply_damage(tank, 25):
+                        results["destroyed_tanks"].append(tank._id)
 
             results["collisions"].append(
                 {

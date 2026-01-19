@@ -543,6 +543,7 @@ def process_physics_tick(
         if tank.hp <= 0:
             continue
         dmg = _terrain_damage_at_position(tank.position, map_info.terrain_list)
+        dmg *= 0.1
         if dmg and apply_damage(tank, dmg):
             results["destroyed_tanks"].append(tank._id)
 

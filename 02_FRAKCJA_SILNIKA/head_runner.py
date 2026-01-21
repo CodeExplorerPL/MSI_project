@@ -40,7 +40,7 @@ except ImportError as e:
 
 # --- Stałe Konfiguracyjne Grafiki ---
 LOG_LEVEL = "INFO"
-MAP_SEED = "map1.csv"
+MAP_SEED = "open.csv"
 TARGET_FPS = 60
 SCALE = 2  # Współczynnik skalowania grafiki (wszystko będzie 2x większe)
 TILE_SIZE = 10  # To MUSI być zgodne z domyślną wartością w map_loader.py

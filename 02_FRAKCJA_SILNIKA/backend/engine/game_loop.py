@@ -495,16 +495,16 @@ class GameLoop:
     def _get_spawn_position(self, team: int, index: int) -> Position:
         """
         Get spawn position for a tank. Calculates positions proportionally to the map size.
+        Ensures spawn position doesn't overlap with obstacles or other tanks.
 
         Args:
             team: Team number (1 or 2)
             index: Tank index within team
 
         Returns:
-            Spawn position
+            Spawn position (clear of obstacles)
         """
         if not self.map_info or not self.map_info.size:
-            # Fallback to config if map not loaded, which is unlikely here.
             self.logger.warning("MapInfo not available for spawn, using default config size.")
             map_width = self.game_core.config.map_config.width
             map_height = self.game_core.config.map_config.height
@@ -512,31 +512,113 @@ class GameLoop:
             map_width, map_height = self.map_info.size
 
         # Proportional constants based on an original 500x500 map design
-        X_MARGIN_RATIO = 0.1  # 50 / 500
-        Y_MARGIN_RATIO = 0.1  # 50 / 500
-        X_SPACING_RATIO = 0.04 # 15 / 500
-        Y_SPACING_RATIO = 0.04 # 20 / 500
-        RIGHT_MARGIN_RATIO = 0.2 # 100 / 500
-
-        # Offset do centrowania czołgów na kafelkach (zakładając TILE_SIZE=10).
-        # Zapobiega to spawnowaniu na liniach siatki.
+        X_MARGIN_RATIO = 0.1
+        Y_MARGIN_RATIO = 0.1
+        X_SPACING_RATIO = 0.04
+        Y_SPACING_RATIO = 0.04
+        RIGHT_MARGIN_RATIO = 0.2
         offset = 5.0
 
         if team == 1:
-            # Team 1 spawns on left side
             x = map_width * X_MARGIN_RATIO + (index * map_width * X_SPACING_RATIO) + offset
             y = map_height * Y_MARGIN_RATIO + (index * map_height * Y_SPACING_RATIO) + offset
         else:
-            # Team 2 spawns on right side
             x = map_width * (1 - RIGHT_MARGIN_RATIO) + (index * map_width * X_SPACING_RATIO) + offset
             y = map_height * Y_MARGIN_RATIO + (index * map_height * Y_SPACING_RATIO) + offset
 
-        # Clamp positions to be safely within map boundaries
-        margin = 5.0 # A small margin to avoid spawning exactly on the edge
+        margin = 5.0
         x = max(margin, min(x, map_width - margin))
         y = max(margin, min(y, map_height - margin))
 
-        return Position(x, y)
+        candidate = Position(x, y)
+        
+        # Check if position is valid (no obstacle collision)
+        if self._is_position_valid(candidate):
+            return candidate
+        
+        # If blocked, search in expanding spiral for clear position
+        self.logger.warning(f"Spawn position ({x:.1f}, {y:.1f}) blocked, searching for clear spot")
+        return self._find_clear_spawn_position(candidate, team, map_width, map_height)
+
+    def _is_position_valid(self, position: Position, tank_size: list = None) -> bool:
+        """
+        Check if a position is valid for spawning (no overlap with obstacles or existing tanks).
+        
+        Args:
+            position: Position to check
+            tank_size: Size of tank bounding box [width, height], defaults to [10, 10]
+        
+        Returns:
+            True if position is clear
+        """
+        if tank_size is None:
+            tank_size = [10, 10]  # Default tank size
+        
+        if not self.map_info:
+            return True
+        
+        # Check obstacle collisions
+        for obstacle in self.map_info.obstacle_list:
+            if not obstacle.is_alive:
+                continue
+            obs_pos = getattr(obstacle, "position", getattr(obstacle, "_position", None))
+            obs_size = getattr(obstacle, "size", getattr(obstacle, "_size", [10, 10]))
+            if obs_pos and rectangles_overlap(position, tank_size, obs_pos, obs_size):
+                return False
+        
+        # Check collision with already-spawned tanks
+        for tank in self.tanks.values():
+            tank_pos = tank.position
+            existing_tank_size = getattr(tank, "size", getattr(tank, "_size", [10, 10]))
+            if rectangles_overlap(position, tank_size, tank_pos, existing_tank_size):
+                return False
+        
+        return True
+
+    def _find_clear_spawn_position(
+        self, start: Position, team: int, map_width: float, map_height: float
+    ) -> Position:
+        """
+        Search for a clear spawn position in expanding circles from start position.
+        
+        Args:
+            start: Initial spawn position that was blocked
+            team: Team number (1=left side, 2=right side)
+            map_width: Map width
+            map_height: Map height
+        
+        Returns:
+            Clear position
+        """
+        import math
+        
+        search_radius = 15.0  # Start search radius
+        max_radius = 200.0    # Maximum search radius
+        step = 15.0           # Radius increment
+        margin = 10.0         # Map edge margin
+        
+        while search_radius <= max_radius:
+            # Try positions in a circle
+            for angle_deg in range(0, 360, 30):
+                angle_rad = math.radians(angle_deg)
+                x = start.x + math.cos(angle_rad) * search_radius
+                y = start.y + math.sin(angle_rad) * search_radius
+                
+                # Clamp to map bounds
+                x = max(margin, min(x, map_width - margin))
+                y = max(margin, min(y, map_height - margin))
+                
+                candidate = Position(x, y)
+                if self._is_position_valid(candidate):
+                    self.logger.info(f"Found clear spawn at ({x:.1f}, {y:.1f})")
+                    return candidate
+            
+            search_radius += step
+        
+        # Fallback: return original position (game will handle collision)
+        self.logger.error("Could not find clear spawn position, using blocked position")
+        return start
+
 
     def _load_agents(self, agent_modules: Optional[List]) -> bool:
         """
@@ -875,8 +957,22 @@ class GameLoop:
             self.logger.error(traceback.format_exc())
 
     def _check_death_conditions(self):
-        """Sprawdzenie warunków śmierci czołgów i powiadamianie agentów."""
+        """
+        Sprawdzenie warunków śmierci czołgów i powiadamianie agentów.
+        
+        Kill credit is only given if death was caused by projectile hit.
+        Deaths from sudden death, terrain, or collision do not award kill credit.
+        """
         newly_dead_tanks = []
+        
+        # Get tanks that were destroyed by projectile hits this tick
+        projectile_kills = set()
+        for hit in self.last_physics_results.get("projectile_hits", []):
+            if hit.hit_tank_id:
+                # Check if this hit killed the tank
+                target_tank = self.tanks.get(hit.hit_tank_id)
+                if target_tank and not target_tank.is_alive():
+                    projectile_kills.add(hit.hit_tank_id)
 
         for tank_id, tank in self.tanks.items():
             # Przetwarzaj śmierć czołgu tylko raz
@@ -884,11 +980,19 @@ class GameLoop:
                 newly_dead_tanks.append(tank_id)
                 self.processed_deaths.add(tank_id)
                 
-                # Zapisz zabójstwo dla atakującego
-                attacker_id = self.last_attacker.get(tank_id)
-                if attacker_id and attacker_id in self.scoreboards:
-                    self.scoreboards[attacker_id].tanks_killed += 1
-                    self.logger.info(f"Tank {tank_id} destroyed by {attacker_id}")
+                # Only credit kill if death was from projectile hit
+                if tank_id in projectile_kills:
+                    attacker_id = self.last_attacker.get(tank_id)
+                    if attacker_id and attacker_id in self.scoreboards:
+                        self.scoreboards[attacker_id].tanks_killed += 1
+                        self.logger.info(f"Tank {tank_id} killed by {attacker_id} (projectile)")
+                else:
+                    # Death from other cause (sudden death, terrain, collision)
+                    self.logger.info(f"Tank {tank_id} died (non-projectile cause, no kill credit)")
+                
+                # Clear last_attacker to prevent incorrect future credit
+                if tank_id in self.last_attacker:
+                    del self.last_attacker[tank_id]
 
                 # Powiadom agenta o zniszczeniu
                 self._notify_agent_destroyed(tank_id)
@@ -902,9 +1006,8 @@ class GameLoop:
                 if tank_id in self.tanks:
                     del self.tanks[tank_id]
             
-            # Usuń także z listy w map_info, naprawiając błąd AttributeError
+            # Usuń także z listy w map_info
             if self.map_info:
-                # Modyfikujemy wewnętrzną listę `_all_tanks` zamiast publicznej właściwości
                 self.map_info._all_tanks = [t for t in self.map_info._all_tanks if t._id not in newly_dead_tanks]
 
     def _notify_agent_destroyed(self, tank_id: str):

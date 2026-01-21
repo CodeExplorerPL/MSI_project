@@ -122,15 +122,15 @@ class RandomAgent:
 
             # --- Shooting Decision ---
             # Decide if we should start aiming
-            wants_to_shoot = random.random() < (0.1 if sensor_data.get("seen_tanks") else 0.01)
+            wants_to_shoot = random.random() < 0.3
             if wants_to_shoot:
                 self.aim_timer = 10  # Start aiming for 10 ticks
 
         # --- Movement Logic (independent of aiming) ---
         self.move_timer -= 1
         if self.move_timer <= 0:
-            self.current_move_speed = random.choice([3.0, 3.0, 0.0, -1.0])
-            self.move_timer = random.randint(60, 180)
+            self.current_move_speed = random.choice([30.0, 30.0, 0.0, -10.0])
+            self.move_timer = random.randint(1, 10)
         
         return ActionCommand(
             barrel_rotation_angle=barrel_rotation,

@@ -210,9 +210,9 @@ def check_visibility(
 
         seen_tanks.append(
             SeenTank(
-                _id=other_tank._id,
-                _team=other_tank._team,
-                _tank_type=other_tank._tank_type,
+                id=other_tank._id,
+                team=other_tank._team,
+                tank_type=other_tank._tank_type,
                 position=other_tank.position,
                 is_damaged=other_tank.hp < 0.3 * other_tank._max_hp,
                 heading=other_tank.heading,

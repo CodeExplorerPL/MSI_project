@@ -67,8 +67,8 @@ TankUnion = Union[LightTank, HeavyTank, SniperTank]
 # Set number of tanks per team. Each tank type is randomly chosen (1-3).
 # Tank types: 1 = LightTank, 2 = HeavyTank, 3 = SniperTank
 
-TEAM_A_NBR = 5  # Number of tanks in Team A (Team 1)
-TEAM_B_NBR = 5  # Number of tanks in Team B (Team 2)
+TEAM_A_NBR = 2  # Number of tanks in Team A (Team 1)
+TEAM_B_NBR = 2  # Number of tanks in Team B (Team 2)
 
 # Base port for agent servers (tank_1_1 -> 8001, tank_1_2 -> 8002, etc.)
 AGENT_BASE_PORT = 8001
@@ -1031,14 +1031,15 @@ class GameLoop:
 
     def _update_team_counts(self):
         """Aktualizacja liczby żywych czołgów w zespołach."""
-        team_counts = {}
+        # Initialize both teams with 0 count to ensure dead teams are tracked
+        team_counts = {1: 0, 2: 0}
 
         for tank_id, tank in self.tanks.items():
             if tank.is_alive():
                 team = tank.team
                 team_counts[team] = team_counts.get(team, 0) + 1
 
-        # Update in game core
+        # Update ALL teams in game core (including those with 0 alive)
         for team, count in team_counts.items():
             self.game_core.update_team_count(team, count)
 

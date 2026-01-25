@@ -39,7 +39,7 @@ except ImportError as e:
     sys.exit(1)
 
 # --- Stałe Konfiguracyjne Grafiki ---
-LOG_LEVEL = "INFO"
+LOG_LEVEL = "DEBUG"
 MAP_SEED = "open.csv"
 TARGET_FPS = 60
 SCALE = 2  # Współczynnik skalowania grafiki (wszystko będzie 2x większe)

@@ -218,6 +218,81 @@ def check_tank_boundary_collision(
     )
 
 
+def _clamp_position_to_map(
+    position: Position,
+    size: List[int],
+    map_size: Optional[List[int]]
+) -> Position:
+    if not map_size:
+        return position
+    half_w, half_h = size[0] / 2.0, size[1] / 2.0
+    clamped_x = min(max(position.x, half_w), map_size[0] - half_w)
+    clamped_y = min(max(position.y, half_h), map_size[1] - half_h)
+    return Position(clamped_x, clamped_y)
+
+
+def _candidate_has_collision(
+    tank: TankUnion,
+    candidate: Position,
+    map_size: Optional[List[int]],
+    obstacles: Optional[List[ObstacleUnion]]
+) -> bool:
+    original_pos = tank.position
+    tank.position = candidate
+    try:
+        if map_size and check_tank_boundary_collision(tank, map_size):
+            return True
+        if obstacles and check_tank_obstacle_collision(tank, obstacles):
+            return True
+        return False
+    finally:
+        tank.position = original_pos
+
+
+def resolve_tank_collision_position(
+    tank: TankUnion,
+    old_pos: Position,
+    new_pos: Position,
+    map_size: Optional[List[int]],
+    obstacles: Optional[List[ObstacleUnion]],
+    strong_recoil: bool = False
+) -> Position:
+    """
+    Cofnij czołg bardziej niż 1 krok, by uniknąć ciągłego styku z przeszkodą.
+    """
+    size = get_tank_size(tank)
+    dx = new_pos.x - old_pos.x
+    dy = new_pos.y - old_pos.y
+    dist = math.hypot(dx, dy)
+
+    if dist == 0:
+        return _clamp_position_to_map(old_pos, size, map_size)
+
+    nx, ny = dx / dist, dy / dist
+    
+    if strong_recoil:
+        # Użytkownik chce odbicie o "pół bloku" (np. 5 jednostek) dla ścian
+        recoil_distance = 5.0
+        candidates = (recoil_distance, recoil_distance * 0.5, 1.0, 0.1)
+    else:
+        # Oryginalna logika "miękkiego" cofnięcia dla drzew i kolców
+        base_push = max(0.1, min(dist * 0.6, min(size) * 0.6))
+        candidates = [base_push * m for m in (1.0, 1.5, 2.0, 3.0)]
+
+    for bounce in candidates:
+        candidate = Position(
+            old_pos.x - nx * bounce,
+            old_pos.y - ny * bounce
+        )
+        candidate = _clamp_position_to_map(candidate, size, map_size)
+        
+        # Sprawdź czy miejsce po odbiciu jest wolne
+        if not _candidate_has_collision(tank, candidate, map_size, obstacles):
+            return candidate
+
+    return _clamp_position_to_map(old_pos, size, map_size)
+
+
 def check_tank_obstacle_collision(
     tank: TankUnion,
     obstacles: List[ObstacleUnion]
@@ -486,10 +561,12 @@ def process_physics_tick(
         # Apply movement tentatively, then validate collisions.
         tank.position = new_pos
 
-        # Boundary collision -> rollback
+        # Boundary collision -> rollback (z dodatkowym cofnięciem)
         map_size = getattr(map_info, "size", getattr(map_info, "_size", None))
         if map_size and check_tank_boundary_collision(tank, map_size):
-            tank.position = old_pos
+            tank.position = resolve_tank_collision_position(
+                tank, old_pos, new_pos, map_size, map_info.obstacle_list
+            )
             results["collisions"].append(
                 {
                     "type": CollisionType.TANK_BOUNDARY.value,
@@ -501,6 +578,10 @@ def process_physics_tick(
         # Obstacle collision -> rollback
         hit_obstacle = check_tank_obstacle_collision(tank, map_info.obstacle_list)
         if hit_obstacle is not None:
+            # Determine type early for recoil logic
+            obstacle_type = getattr(hit_obstacle, "obstacle_type", getattr(hit_obstacle, "_obstacle_type", None))
+            use_strong_recoil = (obstacle_type == ObstacleType.WALL)
+
             # Jeśli czołg już był w kolizji na starej pozycji (np. zespawnował się w ścianie),
             # nie naliczaj obrażeń co tick – obrażenia powinny być "za wejście" w przeszkodę.
             was_colliding_before_move = False
@@ -513,24 +594,33 @@ def process_physics_tick(
                     was_colliding_before_move = True
                     break
 
-            tank.position = old_pos
-            obstacle_type = getattr(hit_obstacle, "obstacle_type", getattr(hit_obstacle, "_obstacle_type", None))
+            tank.position = resolve_tank_collision_position(
+                tank, old_pos, new_pos, map_size, map_info.obstacle_list,
+                strong_recoil=use_strong_recoil
+            )
+            
             collision_type = CollisionType.TANK_WALL
             if obstacle_type == ObstacleType.TREE:
                 collision_type = CollisionType.TANK_TREE
-                # Spec: Zderzenie czołgu z drzewem: -10 HP (drzewo jest niszczone)
+                # Spec: Zderzenie czołgu z drzewem: -5 HP (drzewo jest niszczone)
                 if not was_colliding_before_move:
-                    if apply_damage(tank, 10):
+                    if apply_damage(tank, 5):
                         results["destroyed_tanks"].append(tank._id)
                     if getattr(hit_obstacle, "is_destructible", False):
                         hit_obstacle.is_alive = False
                         results["destroyed_obstacles"].append(getattr(hit_obstacle, "id", getattr(hit_obstacle, "_id", None)))
             elif obstacle_type == ObstacleType.ANTI_TANK_SPIKE:
                 collision_type = CollisionType.TANK_SPIKE
-            else:
-                # Spec: Zderzenie czołgu ze ścianą: -25 HP
+            elif obstacle_type == ObstacleType.WALL:
+                collision_type = CollisionType.TANK_WALL
+                # Spec: Zderzenie czołgu ze ścianą: -10 HP
                 if not was_colliding_before_move:
-                    if apply_damage(tank, 25):
+                    if apply_damage(tank, 10):
+                        results["destroyed_tanks"].append(tank._id)
+            else:
+                # Inne przeszkody: -5 HP
+                if not was_colliding_before_move:
+                    if apply_damage(tank, 5):
                         results["destroyed_tanks"].append(tank._id)
 
             results["collisions"].append(
@@ -567,7 +657,7 @@ def process_physics_tick(
         if tank.hp <= 0:
             continue
         dmg = _terrain_damage_at_position(tank.position, map_info.terrain_list)
-        dmg *= 0.1
+        dmg *= 0.05
         if dmg and apply_damage(tank, dmg):
             results["destroyed_tanks"].append(tank._id)
 

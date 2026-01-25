@@ -78,7 +78,7 @@ class Water(Terrain):
     """Woda: Spowalnia i zadaje obrażenia."""
     _terrain_type: Literal["Water"] = field(default="Water", init=False)
     _movement_speed_modifier: float = field(default=0.7, init=False)
-    _deal_damage: int = field(default=2, init=False)
+    _deal_damage: int = field(default=1, init=False)
 
 
 TerrainUnion = Union[Grass, Road, Swamp, PotholeRoad, Water]

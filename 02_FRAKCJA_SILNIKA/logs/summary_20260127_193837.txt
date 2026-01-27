@@ -1,0 +1,19 @@
+
+=== GAME SUMMARY ===
+Session ID: 20260127_193837
+Total Game Time: 4.39 seconds
+Total Ticks: 109
+Average Tick Time: 0.0000 seconds
+
+=== STATISTICS ===
+Tanks Spawned: 4
+Tanks Killed: 0
+Shots Fired: 0
+Hits Landed: 0
+Hit Accuracy: 0.0%
+PowerUps Spawned: 3
+PowerUps Collected: 0
+Collisions: 0
+
+=== RESULTS ===
+{'session_id': 'fc080a0c', 'total_ticks': 109, 'winner_team': None, 'reason': 'normal', 'sudden_death_reached': False, 'final_team_counts': {1: 2, 2: 2}}

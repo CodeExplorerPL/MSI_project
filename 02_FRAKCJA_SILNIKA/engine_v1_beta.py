@@ -21,9 +21,11 @@ from typing import Dict, Any, List
 
 # --- Konfiguracja Ścieżek ---
 try:
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    if current_dir not in sys.path:
-        sys.path.insert(0, current_dir)
+    current_file_dir = os.path.dirname(os.path.abspath(__file__))
+    main_dir = os.path.dirname(current_file_dir)
+
+    if main_dir not in sys.path:
+        sys.path.insert(0, main_dir)
 
     from backend.engine.game_loop import GameLoop, TEAM_A_NBR, TEAM_B_NBR, AGENT_BASE_PORT, TankScoreboard
     from backend.utils.logger import set_log_level
@@ -44,8 +46,9 @@ MAP_SEED = "open.csv"
 TARGET_FPS = 60
 SCALE = 2  # Współczynnik skalowania grafiki (wszystko będzie 2x większe)
 TILE_SIZE = 10  # To MUSI być zgodne z domyślną wartością w map_loader.py
+AGENT_NAME = "random_agent.py" # Nazwa pliku agenta
 
-ASSETS_BASE_PATH = os.path.join(current_dir, 'frontend', 'assets')
+ASSETS_BASE_PATH = os.path.join(current_file_dir, 'frontend', 'assets')
 TILE_ASSETS_PATH = os.path.join(ASSETS_BASE_PATH, 'tiles')
 POWERUP_ASSETS_PATH = os.path.join(ASSETS_BASE_PATH, 'power-ups')
 TANK_ASSETS_PATH = os.path.join(ASSETS_BASE_PATH, 'tanks')
@@ -535,7 +538,7 @@ def main():
 
     agent_processes = []
     total_tanks = TEAM_A_NBR + TEAM_B_NBR
-    agent_script_path = os.path.join(current_dir, 'random_agent.py')
+    agent_script_path = os.path.join(main_dir, '03_FRAKCJA_AGENTOW', AGENT_NAME)
 
     if not os.path.exists(agent_script_path):
         print(f"BŁĄD: Nie znaleziono skryptu agenta w: {agent_script_path}")

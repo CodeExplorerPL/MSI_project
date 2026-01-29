@@ -8,6 +8,12 @@ Ten skrypt automatycznie:
 4. Wyświetla na bieżąco stan gry: pozycje czołgów, strzały, power-upy.
 5. Po zakończeniu gry zamyka okno i serwery agentów.
 """
+import ctypes
+try:
+    # To naprawia problem skalowania DPI w Windows
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+except Exception:
+    pass  # Ignoruj, jeśli to nie Windows lub starsza wersja
 
 import subprocess
 import sys

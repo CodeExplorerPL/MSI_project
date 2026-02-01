@@ -50,11 +50,15 @@ if __name__ == "__main__":
     # New arguments for obstacle and terrain ratios
     parser.add_argument("--obstacle-ratio", type=float, default=0.2, help="The total ratio of obstacle tiles.")
     parser.add_argument("--terrain-ratio", type=float, default=0.8, help="The total ratio of terrain tiles.")
+    parser.add_argument("--obstacle-types", nargs='+', default=OBSTACLE_TYPES, help=f"List of obstacle types to use. Default: {' '.join(OBSTACLE_TYPES)}")
+    parser.add_argument("--terrain-types", nargs='+', default=TERRAIN_TYPES, help=f"List of terrain types to use. Default: {' '.join(TERRAIN_TYPES)}")
 
     args = parser.parse_args()
 
     obstacle_ratio = args.obstacle_ratio
     terrain_ratio = args.terrain_ratio
+    selected_obstacle_types = args.obstacle_types
+    selected_terrain_types = args.terrain_types
 
     # Validation for main ratios
     if obstacle_ratio < 0 or terrain_ratio < 0:
@@ -69,15 +73,15 @@ if __name__ == "__main__":
     tile_ratios = {}
 
     # Distribute obstacle ratio evenly among obstacle types
-    if obstacle_ratio > 0 and OBSTACLE_TYPES:
-        part = obstacle_ratio / len(OBSTACLE_TYPES)
-        for o in OBSTACLE_TYPES:
+    if obstacle_ratio > 0 and selected_obstacle_types:
+        part = obstacle_ratio / len(selected_obstacle_types)
+        for o in selected_obstacle_types:
             tile_ratios[o] = part
     
     # Distribute terrain ratio evenly among terrain types
-    if terrain_ratio > 0 and TERRAIN_TYPES:
-        part = terrain_ratio / len(TERRAIN_TYPES)
-        for t in TERRAIN_TYPES:
+    if terrain_ratio > 0 and selected_terrain_types:
+        part = terrain_ratio / len(selected_terrain_types)
+        for t in selected_terrain_types:
             tile_ratios[t] = part
             
     if not tile_ratios:

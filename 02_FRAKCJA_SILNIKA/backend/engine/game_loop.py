@@ -883,6 +883,7 @@ class GameLoop:
                 {
                     "id": getattr(o, "_id", ""),
                     "position": {"x": o._position.x, "y": o._position.y},
+                    "type": o._obstacle_type,
                     "is_destructible": o.is_destructible,
                 }
                 for o in sensor_data.seen_obstacles
@@ -890,6 +891,9 @@ class GameLoop:
             "seen_terrains": [
                 {
                     "position": {"x": t._position.x, "y": t._position.y},
+                    "type": t._terrain.type,
+                    "speed_modifier": t._terrain.speed_modifier,
+                    "dmg": t._terrain.dmg,
                 }
                 for t in sensor_data.seen_terrains
             ],

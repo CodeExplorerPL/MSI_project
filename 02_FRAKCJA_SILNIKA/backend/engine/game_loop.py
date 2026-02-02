@@ -891,9 +891,9 @@ class GameLoop:
             "seen_terrains": [
                 {
                     "position": {"x": t._position.x, "y": t._position.y},
-                    "type": t._terrain.type,
-                    "speed_modifier": t._terrain.speed_modifier,
-                    "dmg": t._terrain.dmg,
+                    "type": t._terrain_type,
+                    "speed_modifier": t._movement_speed_modifier,
+                    "dmg": t._deal_damage,
                 }
                 for t in sensor_data.seen_terrains
             ],

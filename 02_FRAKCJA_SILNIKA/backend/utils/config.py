@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any
 
 # Import existing structures
 from ..structures.ammo import AmmoType
@@ -53,8 +53,8 @@ class PowerUpType(Enum):
 class MapConfig:
     """Konfiguracja mapy."""
 
-    width: int = 500
-    height: int = 500
+    width: int = 200
+    height: int = 200
     available_layouts: int = 3
     obstacle_size: Tuple[int, int] = (10, 10)
     terrain_size: Tuple[int, int] = (10, 10)
@@ -63,55 +63,53 @@ class MapConfig:
 
 @dataclass
 class TankConfig:
-    """Konfiguracja czołgów."""
 
     size: Tuple[int, int] = (5, 5)
     team_size: int = 5
     team_count: int = 2
 
-    # Statystyki dla różnych typów czołgów
-    tank_stats: Dict[TankType, Dict] = field(
+    tank_stats: Dict[TankType, Dict[str, Any]] = field(
         default_factory=lambda: {
             TankType.LIGHT: {
                 "max_hp": 80,
                 "max_shield": 30,
-                "top_speed": 3.0,
-                "vision_range": 80,
-                "vision_angle": 45,
-                "barrel_spin_rate": 10.0,
-                "heading_spin_rate": 8.0,
+                "top_speed": 5.0,
+                "vision_range": 70.0,
+                "vision_angle": 40.0,
+                "barrel_spin_rate": 90.0,
+                "heading_spin_rate": 70.0,
                 "base_ammo": {
-                    AmmoType.LIGHT: 30,
-                    AmmoType.HEAVY: 5,
-                    AmmoType.LONG_DISTANCE: 3,
+                    AmmoType.HEAVY: 1,
+                    AmmoType.LIGHT: 15,
+                    AmmoType.LONG_DISTANCE: 2,
                 },
             },
             TankType.HEAVY: {
                 "max_hp": 120,
-                "max_shield": 50,
-                "top_speed": 2.0,
-                "vision_range": 70,
-                "vision_angle": 30,
-                "barrel_spin_rate": 6.0,
-                "heading_spin_rate": 5.0,
+                "max_shield": 80,
+                "top_speed": 1.0,
+                "vision_range": 40.0,
+                "vision_angle": 60.0,
+                "barrel_spin_rate": 70.0,
+                "heading_spin_rate": 30.0,
                 "base_ammo": {
-                    AmmoType.HEAVY: 15,
+                    AmmoType.HEAVY: 5,
                     AmmoType.LIGHT: 10,
-                    AmmoType.LONG_DISTANCE: 5,
+                    AmmoType.LONG_DISTANCE: 2,
                 },
             },
             TankType.SNIPER: {
-                "max_hp": 100,
-                "max_shield": 20,
-                "top_speed": 2.5,
-                "vision_range": 120,
-                "vision_angle": 60,
-                "barrel_spin_rate": 8.0,
-                "heading_spin_rate": 6.0,
+                "max_hp": 40,
+                "max_shield": 30,
+                "top_speed": 3.0,
+                "vision_range": 120.0,
+                "vision_angle": 20.0,
+                "barrel_spin_rate": 100.0,
+                "heading_spin_rate": 45.0,
                 "base_ammo": {
-                    AmmoType.LONG_DISTANCE: 20,
-                    AmmoType.LIGHT: 15,
-                    AmmoType.HEAVY: 3,
+                    AmmoType.HEAVY: 1,
+                    AmmoType.LIGHT: 5,
+                    AmmoType.LONG_DISTANCE: 10,
                 },
             },
         }

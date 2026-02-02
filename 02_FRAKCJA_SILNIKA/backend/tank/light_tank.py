@@ -13,7 +13,7 @@ class LightTank(Tank):
             _id=_id,
             _team=team,
             _vision_angle=40.0,
-            _vision_range=10.0,
+            _vision_range=70.0,
             _top_speed=5.0,
             _barrel_spin_rate=90.0,
             _heading_spin_rate=70.0,

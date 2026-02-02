@@ -13,7 +13,7 @@ class HeavyTank(Tank):
             _id=_id,
             _team=team,
             _vision_angle=60.0,
-            _vision_range=8.0,
+            _vision_range=40.0,
             _top_speed=1.0,  # Cięższy, więc wolniejszy
             _barrel_spin_rate=70.0,
             _heading_spin_rate=30.0,

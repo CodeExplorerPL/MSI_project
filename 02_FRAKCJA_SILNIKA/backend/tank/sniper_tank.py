@@ -9,7 +9,7 @@ class SniperTank(Tank):
             _id=_id,
             _team=team,
             _vision_angle=20.0,
-            _vision_range=25.0,
+            _vision_range=120.0,
             _top_speed=3.0,
             _barrel_spin_rate=100.0,
             _heading_spin_rate=45.0,

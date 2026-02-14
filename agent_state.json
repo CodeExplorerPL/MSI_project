@@ -1,0 +1,418 @@
+{
+    "current_tick": 2113,
+    "static_info": {
+        "id": "tank_2_3",
+        "team": 2,
+        "tank_type": "LIGHT",
+        "vision_angle": 40.0,
+        "vision_range": 70.0,
+        "top_speed": 5.0,
+        "barrel_spin_rate": 30,
+        "heading_spin_rate": 2,
+        "max_hp": 80,
+        "max_shield": 30
+    },
+    "dynamic_info": {
+        "hp": 80,
+        "shield": 10,
+        "position": {
+            "x": 56.692726818235506,
+            "y": 8.543299287274662
+        },
+        "move_speed": 5.0,
+        "barrel_angle": -0.6633860823766895,
+        "heading": 21.281054071940673,
+        "ammo": {
+            "HEAVY": {
+                "count": 0,
+                "_ammo_type": "HEAVY"
+            },
+            "LIGHT": {
+                "count": 15,
+                "_ammo_type": "LIGHT"
+            },
+            "LONG_DISTANCE": {
+                "count": 2,
+                "_ammo_type": "LONG_DISTANCE"
+            }
+        },
+        "ammo_loaded": "HEAVY",
+        "is_overcharged": false,
+        "size": "MISSING",
+        "reload_timer": 0,
+        "enemies_remaining": 3,
+        "visible_tanks": [
+            {
+                "id": "tank_1_3",
+                "team": 1,
+                "tank_type": "LIGHT",
+                "position": {
+                    "x": 61.79782731128293,
+                    "y": 10.415402563946834
+                },
+                "is_damaged": false,
+                "heading": -165.0,
+                "barrel_angle": -30.0,
+                "distance": 5.437538204246452
+            }
+        ],
+        "visible_enemies": [
+            {
+                "id": "tank_1_3",
+                "team": 1,
+                "tank_type": "LIGHT",
+                "position": {
+                    "x": 61.79782731128293,
+                    "y": 10.415402563946834
+                },
+                "is_damaged": false,
+                "heading": -165.0,
+                "barrel_angle": -30.0,
+                "distance": 5.437538204246452
+            }
+        ],
+        "visible_obstacles": [
+            {
+                "id": "e4150616-437a-4a7b-bc78-83594e0e82d1",
+                "position": {
+                    "x": 105.0,
+                    "y": 35.0
+                },
+                "type": "TREE",
+                "is_destructible": true
+            }
+        ],
+        "visible_terrains": [
+            {
+                "position": {
+                    "x": 65.0,
+                    "y": 15.0
+                },
+                "type": "Road",
+                "speed_modifier": 1.5,
+                "dmg": 0
+            },
+            {
+                "position": {
+                    "x": 75.0,
+                    "y": 15.0
+                },
+                "type": "Road",
+                "speed_modifier": 1.5,
+                "dmg": 0
+            },
+            {
+                "position": {
+                    "x": 85.0,
+                    "y": 15.0
+                },
+                "type": "Road",
+                "speed_modifier": 1.5,
+                "dmg": 0
+            },
+            {
+                "position": {
+                    "x": 95.0,
+                    "y": 15.0
+                },
+                "type": "Road",
+                "speed_modifier": 1.5,
+                "dmg": 0
+            },
+            {
+                "position": {
+                    "x": 105.0,
+                    "y": 15.0
+                },
+                "type": "Road",
+                "speed_modifier": 1.5,
+                "dmg": 0
+            },
+            {
+                "position": {
+                    "x": 115.0,
+                    "y": 15.0
+                },
+                "type": "Road",
+                "speed_modifier": 1.5,
+                "dmg": 0
+            },
+            {
+                "position": {
+                    "x": 85.0,
+                    "y": 25.0
+                },
+                "type": "Road",
+                "speed_modifier": 1.5,
+                "dmg": 0
+            },
+            {
+                "position": {
+                    "x": 95.0,
+                    "y": 25.0
+                },
+                "type": "Road",
+                "speed_modifier": 1.5,
+                "dmg": 0
+            },
+            {
+                "position": {
+                    "x": 105.0,
+                    "y": 25.0
+                },
+                "type": "Road",
+                "speed_modifier": 1.5,
+                "dmg": 0
+            },
+            {
+                "position": {
+                    "x": 115.0,
+                    "y": 25.0
+                },
+                "type": "Road",
+                "speed_modifier": 1.5,
+                "dmg": 0
+            }
+        ],
+        "visible_powerups": []
+    },
+    "meta_info": {
+        "closest_enemy_angle": 20.80199553188737,
+        "closest_enemy_dist": 5.437538204246452,
+        "target_id": "tank_1_3",
+        "is_aimed_at": false
+    },
+    "memory": {
+        "tank_1_3": {
+            "id": "tank_1_3",
+            "last_seen_pos": {
+                "x": 61.79782731128293,
+                "y": 10.415402563946834
+            },
+            "last_seen_tick": 2113,
+            "tank_type": "LIGHT",
+            "team": 1
+        },
+        "tank_1_1": {
+            "id": "tank_1_1",
+            "last_seen_pos": {
+                "x": 24.059664100797725,
+                "y": 3.7929703510502613
+            },
+            "last_seen_tick": 1208,
+            "tank_type": "Sniper",
+            "team": 1
+        }
+    },
+    "debug": {
+        "goal_cell": [
+            59,
+            14
+        ],
+        "path": [
+            [
+                30,
+                5
+            ],
+            [
+                31,
+                5
+            ],
+            [
+                32,
+                5
+            ],
+            [
+                33,
+                5
+            ],
+            [
+                34,
+                5
+            ],
+            [
+                35,
+                5
+            ],
+            [
+                36,
+                5
+            ],
+            [
+                37,
+                5
+            ],
+            [
+                38,
+                5
+            ],
+            [
+                39,
+                5
+            ],
+            [
+                40,
+                5
+            ],
+            [
+                41,
+                5
+            ],
+            [
+                42,
+                5
+            ],
+            [
+                43,
+                5
+            ],
+            [
+                44,
+                5
+            ],
+            [
+                45,
+                5
+            ],
+            [
+                46,
+                5
+            ],
+            [
+                47,
+                5
+            ],
+            [
+                48,
+                5
+            ],
+            [
+                49,
+                5
+            ],
+            [
+                50,
+                5
+            ],
+            [
+                51,
+                5
+            ],
+            [
+                52,
+                5
+            ],
+            [
+                53,
+                5
+            ],
+            [
+                54,
+                5
+            ],
+            [
+                55,
+                5
+            ],
+            [
+                56,
+                5
+            ],
+            [
+                57,
+                5
+            ],
+            [
+                58,
+                5
+            ],
+            [
+                59,
+                5
+            ],
+            [
+                59,
+                6
+            ],
+            [
+                59,
+                7
+            ],
+            [
+                59,
+                8
+            ],
+            [
+                59,
+                9
+            ],
+            [
+                59,
+                10
+            ],
+            [
+                59,
+                11
+            ],
+            [
+                59,
+                12
+            ],
+            [
+                59,
+                13
+            ],
+            [
+                59,
+                14
+            ]
+        ],
+        "path_index": 0,
+        "seen_terrain_tiles": [
+            [
+                6,
+                1
+            ],
+            [
+                7,
+                1
+            ],
+            [
+                8,
+                1
+            ],
+            [
+                9,
+                1
+            ],
+            [
+                10,
+                1
+            ],
+            [
+                11,
+                1
+            ],
+            [
+                8,
+                2
+            ],
+            [
+                9,
+                2
+            ],
+            [
+                10,
+                2
+            ],
+            [
+                11,
+                2
+            ]
+        ],
+        "my_pos": {
+            "x": 56.692726818235506,
+            "y": 8.543299287274662
+        }
+    }
+}

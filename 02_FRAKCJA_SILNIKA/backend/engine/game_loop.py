@@ -67,8 +67,8 @@ TankUnion = Union[LightTank, HeavyTank, SniperTank]
 # Set number of tanks per team. Each tank type is randomly chosen (1-3).
 # Tank types: 1 = LightTank, 2 = HeavyTank, 3 = SniperTank
 
-TEAM_A_NBR = 5  # Number of tanks in Team A (Team 1)
-TEAM_B_NBR = 5  # Number of tanks in Team B (Team 2)
+TEAM_A_NBR = 3  # Number of tanks in Team A (Team 1)
+TEAM_B_NBR = 3  # Number of tanks in Team B (Team 2)
 
 # Base port for agent servers (tank_1_1 -> 8001, tank_1_2 -> 8002, etc.)
 AGENT_BASE_PORT = 8001

@@ -8,6 +8,15 @@ Ten skrypt automatycznie:
 4. Wyświetla na bieżąco stan gry: pozycje czołgów, strzały, power-upy.
 5. Po zakończeniu gry zamyka okno i serwery agentów.
 """
+import json
+TILE_SIZE = 10
+SUBDIV = 5
+CELL_SIZE = TILE_SIZE / SUBDIV
+
+def cell_center(cell):
+    return ((cell[0] + 0.5) * CELL_SIZE, (cell[1] + 0.5) * CELL_SIZE)
+
+
 import ctypes
 try:
     # To naprawia problem skalowania DPI w Windows
@@ -48,11 +57,30 @@ except ImportError as e:
 
 # --- Stałe Konfiguracyjne Grafiki ---
 LOG_LEVEL = "DEBUG"
-MAP_SEED = "advanced_road_trees.csv"
+MAP_SEED = "road_trees.csv"
 TARGET_FPS = 60
-SCALE = 5  # Współczynnik skalowania grafiki (wszystko będzie 4x większe)
+SCALE = 3  # Współczynnik skalowania grafiki (wszystko będzie 4x większe)
 TILE_SIZE = 10  # To MUSI być zgodne z domyślną wartością w map_loader.py
 AGENT_NAME = "random_agent.py" # Nazwa pliku agenta
+
+AGENT_FILES = [
+    "random_agent.py",    
+    "random_agent.py",    
+    "random_agent.py",
+    "random_agent.py",
+    "random_agent.py",
+    "random_agent_seba.py",
+]
+
+ARGUMENTS = [
+    None,
+    None,
+    None,
+    None,
+    None,
+    "2",
+
+]
 
 ASSETS_BASE_PATH = os.path.join(current_file_dir, 'frontend', 'assets')
 TILE_ASSETS_PATH = os.path.join(ASSETS_BASE_PATH, 'tiles')
@@ -81,6 +109,59 @@ POWERUP_ASSET_MAP = {
     "AMMO_LONG_DISTANCE": "AmmoBox_Sniper",
 }
 
+
+def draw_agent_debug_path(map_surface, debug, scale, map_h):
+    if not debug:
+        return
+
+    path = debug.get("path")
+    goal = debug.get("goal_cell")
+    path_index = debug.get("path_index", 0)
+
+    if path:
+        pts = []
+        for i, cell in enumerate(path):
+            wx, wy = cell_center(cell)
+            sx = int(wx * scale)
+            sy = int(map_h - (wy * scale))
+            pts.append((sx, sy))
+
+            if i <= path_index:
+                color = (80, 80, 80)      
+                r = 3
+            else:
+                color = (0, 255, 255)    
+                r = 4
+
+            pygame.draw.circle(map_surface, color, (sx, sy), r)
+
+        if len(pts) >= 2:
+            pygame.draw.lines(map_surface, (0, 255, 255), False, pts, 1)
+
+    if goal:
+        wx, wy = cell_center(goal)
+        sx = int(wx * scale)
+        sy = int(map_h - (wy * scale))
+        pygame.draw.circle(map_surface, (255, 0, 255), (sx, sy), 7)   # magenta
+        pygame.draw.circle(map_surface, (0, 0, 0), (sx, sy), 7, 1)    # outline
+
+
+def draw_seen_terrain_tiles(map_surface, seen_tiles, scale, map_h, alpha=0.5):
+    if not seen_tiles:
+        return
+    overlay = pygame.Surface(map_surface.get_size(), pygame.SRCALPHA)
+    a = int(255 * alpha)
+    w = int(TILE_SIZE * scale)
+    h = int(TILE_SIZE * scale)
+
+    for (tx, ty) in seen_tiles:
+        world_left = tx * TILE_SIZE
+        world_bottom = ty * TILE_SIZE
+        px_left = int(world_left * scale)
+        px_top  = int(map_h - ((world_bottom + TILE_SIZE) * scale))
+        pygame.draw.rect(overlay, (0, 255, 0, a), (px_left, px_top, w, h))
+
+    map_surface.blit(overlay, (0, 0))
 
 
 # --- Funkcje Pomocnicze Renderowania ---
@@ -559,8 +640,17 @@ def main():
         for i in range(total_tanks):
             port = AGENT_BASE_PORT + i
             name = f"Bot_{i+1}"
-            command = [sys.executable, agent_script_path, "--port", str(port), "--name", name]
-            proc = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            agent_file = AGENT_FILES[i % len(AGENT_FILES)]
+            agent_script_path = os.path.join(main_dir, '03_FRAKCJA_AGENTOW', agent_file)
+            argument = ARGUMENTS[i % len(AGENT_FILES)]
+
+            if argument is not None:
+                command = [sys.executable, agent_script_path, "--port", str(port), "--name", name,  "--modifier", argument]
+            else:
+                command = [sys.executable, agent_script_path, "--port", str(port), "--name", name]
+
+            proc = subprocess.Popen(command)
             agent_processes.append(proc)
             print(f"  -> Agent '{name}' uruchomiony na porcie {port} (PID: {proc.pid})")
 
@@ -578,7 +668,8 @@ def main():
         map_render_height = map_engine_height * SCALE
 
         # Ustaw okno na pełny ekran
-        screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        # screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        screen = pygame.display.set_mode((1280, 720))  # bez pygame.FULLSCREEN
         window_width, window_height = screen.get_size()
         pygame.display.set_caption("Symulator Walk Czołgów")
         clock = pygame.time.Clock()
@@ -778,6 +869,19 @@ def main():
             # Rysowanie czołgów
             for tank in game_loop.tanks.values():
                 draw_tank(map_surface, tank, assets, SCALE, map_render_height)
+
+            debug = None
+            try:
+                with open("agent_state.json", "r") as f:
+                    st = json.load(f)
+                debug = st.get("debug")
+            except Exception:
+                pass
+            if debug:
+                seen_tiles = debug.get("seen_terrain_tiles", [])
+                
+            draw_seen_terrain_tiles(map_surface, seen_tiles, SCALE, map_render_height, alpha=0.5)
+            draw_agent_debug_path(map_surface, debug, SCALE, map_render_height)
 
             # Rysowanie i aktualizacja efektów strzałów
             remaining_shots = []

@@ -131,11 +131,19 @@ class RandomAgent:
         if self.move_timer <= 0:
             self.current_move_speed = random.choice([30.0, 30.0, 0.0, -10.0])
             self.move_timer = random.randint(1, 10)
-        
+            
+        ammo_data = my_tank_status.get("ammo", {})
+        best_ammo_type = None
+
+        if ammo_data:
+            # Znajduje klucz (nazwę amunicji), który ma największą wartość w polu 'count'
+            best_ammo_type = max(ammo_data,
+                                 key=lambda k: ammo_data[k].get("count", 0))
         return ActionCommand(
             barrel_rotation_angle=barrel_rotation,
             heading_rotation_angle=heading_rotation,
             move_speed=self.current_move_speed,
+            ammo_to_load=best_ammo_type,
             should_fire=should_fire
         )
     

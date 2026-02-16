@@ -26,7 +26,7 @@ import sys
 import os
 import math
 import json
-
+import heapq
 # Add paths for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
 controller_dir = os.path.join(os.path.dirname(current_dir), '02_FRAKCJA_SILNIKA', 'controller')
@@ -47,12 +47,20 @@ CELL_SIZE = TILE_SIZE / SUBDIV   # 5.0
 PATH_CHANGE_TIME = 100  
 
 EVAL_EVERY = 50
-FORCE_REPLAN_EVERY = 1000
+FORCE_REPLAN_EVERY = 800
 
 IMPROVEMENT_MARGIN = 0.10  
 MIN_ABS_IMPROVEMENT = 2.0  
 
-
+#########################
+#Params
+#A* - modyfikatory kosztu
+DMG_PENALTY = 2000   #koszt za 1 pkt obrazen
+BASE_MOVE_COST = 1  #koszt ruchu o 1 kratke
+SLOW_TERRAIN_PENALTY_WEIGHT = 75
+STRAIGHT_PENALTY = 2  #koszt za jazdę prosto
+DANGEROUS_NEIGHBOUR_PENALTY = 20 #Kara za to ze jestesmy bezposrednio obok niebezpiecznej kratki
+#########################
 
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Tuple
@@ -66,6 +74,7 @@ class GridNode:
     blocked: bool
     dist_to_me: float
     neighbors: List[Tuple[int, int]] = field(default_factory=list)  # 4-kierunkowo
+    is_risk: bool = False
 
 
 def make_grid_helpers(tile_size, subdiv):
@@ -176,6 +185,10 @@ class RandomAgent:
         self.memory = {}
         self.current_tick = 0
         self.movement_list = []
+        
+        self.map_memory = {}       
+        self.obstacle_memory = set() 
+        
         logging.info(f"[{self.name}] Agent initialized finish")
         
         
@@ -288,12 +301,13 @@ class RandomAgent:
     def get_action(self, current_tick: int, my_tank_status: Dict[str, Any], sensor_data: Dict[str, Any], enemies_remaining: int) -> ActionCommand:
         # logging.debug(f"[DEBUG] get_action called at tick {current_tick}")
 
-        if self.movement_list != None:
-            current_angle = self.next_or_first(movement_list, self.last_angle)
-            print(current_angle)
+        if self.movement_list:
+            current_angle = self.next_or_first(self.movement_list, self.last_angle)
+            # print(current_angle)
             self.last_angle = current_angle
         else:
             print("No movement list provided")
+            pass
             
             
 
@@ -354,7 +368,31 @@ class RandomAgent:
             
         }
         # logging.debug(f"[DEBUG] dynamic_info updated: {self.dynamic_info}")
-
+        
+        # --- ADD THIS BLOCK AT THE END OF THE FUNCTION ---
+        # 1. Memorize Terrain
+        current_terrains = self._get(sensors, 'seen_terrains', [])
+        for t in current_terrains:
+            pos = t.get("position", {})
+            cx, cy = float(pos.get("x", 0.0)), float(pos.get("y", 0.0))
+            dmg = int(t.get("dmg", 0))
+            speed = float(t.get("speed_modifier", 1.0))
+            
+            # Save every sub-cell to memory
+            for cell in self._stamp_tile_center_to_subcells(cx, cy):
+                self.map_memory[cell] = {"dmg": dmg, "speed": speed}
+    
+        # 2. Memorize Obstacles (Walls)
+        current_obstacles = self._get(sensors, 'seen_obstacles', [])
+        for ob in current_obstacles:
+            pos = ob.get("position", {})
+            cx, cy = float(pos.get("x", 0.0)), float(pos.get("y", 0.0))
+            
+            # Save walls to memory
+            for cell in self._stamp_tile_center_to_subcells(cx, cy):
+                self.obstacle_memory.add(cell)
+        # -----------------------------------------------
+        
         # Process meta info and memory
         self._process_meta_info()
         self._process_memory()
@@ -522,48 +560,91 @@ class RandomAgent:
 
             return 0.0
     
-    def _divide_seen_area(self, visible_obstacles, visible_terrains):
+
+    def _divide_seen_area(self, visible_obstacles, visible_terrains): 
         """
         Zwraca listę węzłów (GridNode). Każdy węzeł ma:
         - dmg, speed, blocked
         - neighbors 4-kierunkowo (tylko jeśli istnieją)
         - dist_to_me policzone od razu (na podstawie aktualnej pozycji czołgu)
-        """
-
-        # aktualna pozycja czołgu (world coords)
+        
+        Dodatkowo nie pozwala na to aby czolg jechal doslownie jeden piksel obok np. bagna i szural po nim (spowalnial sie)
+        """    
+    
         my_pos = self.dynamic_info.get("position", {"x": 0.0, "y": 0.0})
         me_x = float(my_pos.get("x", 0.0))
         me_y = float(my_pos.get("y", 0.0))
-
-        # 1) cell -> terrain info
-        terrain_info = {}
-        for t in visible_terrains:
-            pos = t.get("position", {})
-            cx = float(pos.get("x", 0.0))
-            cy = float(pos.get("y", 0.0))
-
-            dmg = int(t.get("dmg", 0))
-            speed = float(t.get("speed_modifier", 1.0))
-
-            for cell in self._stamp_tile_center_to_subcells(cx, cy):
-                terrain_info[cell] = {"dmg": dmg, "speed": speed}
-
+        my_id = self.static_info.get("id")
+    
+        # 1. Mapowanie terenu Z PAMIĘCI (FROM MEMORY)
+        # We iterate over self.map_memory instead of visible_terrains
+        bad_terrain_cells = set()
+        
+        # Use memory for terrain info
+        terrain_info = self.map_memory 
+    
+        # Identify bad terrain from memory
+        for cell, info in terrain_info.items():
+            if info["dmg"] > 0 or info["speed"] < 0.9:
+                bad_terrain_cells.add(cell)
+    
+        # 2. Blokady Z PAMIĘCI (FROM MEMORY)
         blocked_cells = set()
-        inflate_cells = 0  
+        inflate_walls = 3
+        
+        # Use memory for obstacles
+        for cell in self.obstacle_memory:
+            for dx in range(-inflate_walls, inflate_walls + 1):
+                for dy in range(-inflate_walls, inflate_walls + 1):
+                    blocked_cells.add((cell[0] + dx, cell[1] + dy))
         
         for ob in visible_obstacles:
             pos = ob.get("position", {})
-            cx = float(pos.get("x", 0.0))
-            cy = float(pos.get("y", 0.0))
-
+            cx, cy = float(pos.get("x", 0.0)), float(pos.get("y", 0.0))
             for cell in self._stamp_tile_center_to_subcells(cx, cy):
-                for dx in range(-inflate_cells, inflate_cells + 1):
-                    for dy in range(-inflate_cells, inflate_cells + 1):
+                for dx in range(-inflate_walls, inflate_walls + 1):
+                    for dy in range(-inflate_walls, inflate_walls + 1):
                         blocked_cells.add((cell[0] + dx, cell[1] + dy))
 
-        nodes_by_cell = {}
 
-        for cell, info in terrain_info.items():
+        visible_tanks = self.dynamic_info.get("visible_tanks", [])
+        inflate_tanks = 2  
+        
+        for tank in visible_tanks:
+            # Ignorujemy samego siebie!
+            t_id = self._get(tank, "id", "")
+            if t_id == my_id:
+                continue
+
+            pos = self._get(tank, "position", {})
+            tx = float(self._get(pos, "x", 0.0))
+            ty = float(self._get(pos, "y", 0.0))
+            
+            # Traktujemy czołg jak przeszkodę i dodajemy do blocked_cells
+            for cell in self._stamp_tile_center_to_subcells(tx, ty):
+                for dx in range(-inflate_tanks, inflate_tanks + 1):
+                    for dy in range(-inflate_tanks, inflate_tanks + 1):
+                        blocked_cells.add((cell[0] + dx, cell[1] + dy))
+
+        # 3. Bufor Ryzyka (Inflacja Terenu) - to naprawi "Virtual Avoidance"
+        # Oznaczamy kratki SĄSIADUJĄCE z wodą/błotem jako ryzykowne
+        risk_cells = set()
+        for cx, cy in bad_terrain_cells:
+            # Promień 2 kratek (ok. 4 jednostki) od złego terenu
+            for dx in range(-2, 3):
+                for dy in range(-2, 3):
+                    risk_cells.add((cx + dx, cy + dy))
+
+        nodes_by_cell = {}
+        # Domyślny teren (trawa)
+        default_info = {"dmg": 0, "speed": 1.0}
+
+        # Budowanie grafu - uwzględniamy też komórki z risk_cells i blocked_cells
+        # (żeby A* widział "brzeg" mapy, musimy iterować po wszystkich widocznych kafelkach + ich otoczce)
+        all_relevant_cells = set(terrain_info.keys()) | risk_cells
+        
+        for cell in all_relevant_cells:
+            info = terrain_info.get(cell, default_info)
             wx, wy = self._cell_center(cell)
             dist = math.hypot(wx - me_x, wy - me_y)
 
@@ -574,6 +655,7 @@ class RandomAgent:
                 speed=float(info["speed"]),
                 blocked=(cell in blocked_cells),
                 dist_to_me=dist,
+                is_risk=(cell in risk_cells and cell not in bad_terrain_cells), # Jest blisko, ale to nie samo błoto
                 neighbors=[]
             )
 
@@ -594,87 +676,127 @@ class RandomAgent:
             return "not present"
         return "present"
         
-    def _select_target_point(self, divided_area, top_k = 20):
+    def _select_target_point(self, divided_area, current_target=None, top_k=20):
 
         # 1) odrzuć zablokowane
         candidates = [n for n in divided_area if not n.blocked]
         if not candidates:
             return []
-
+            
+        #pODZIAL na bezpiecznych i niebezpiecznych kandydatow
+        safe_candidates = [n for n in candidates if n.dmg == 0]
+        pool = []
+        if safe_candidates:
+            pool = safe_candidates
+        else:
+            pool = candidates
+        
+        
         # 2) top_k najdalszych
-        candidates.sort(key=lambda n: n.dist_to_me, reverse=True)
-        top = candidates[:min(top_k, len(candidates))]
+        pool.sort(key=lambda n: n.dist_to_me, reverse=True)
+        top = pool[:min(top_k, len(pool))]
 
-        # 3) najbezpieczniejsze w top_k: dmg rosnąco, dist malejąco
-        top.sort(key=lambda n: (n.dmg, -n.dist_to_me))
+        def sort_key(n):
+            # Warunkowy Bonus:
+            is_current = (n.cell == current_target)
+            dist_bonus = 50.0 if is_current else 0.0
+            
+            # Kryteria:
+            # 1. dmg (0 lepsze)
+            # 2. is_risk (False lepsze - środek pola)
+            # 3. -dystans (im bardziej ujemny tym lepiej -> czyli im większy dystans + bonus)
+            return (n.dmg, n.is_risk, -(n.dist_to_me + dist_bonus))
+
+        top.sort(key=sort_key)
 
         return [n.cell for n in top]
 
     
     def _a_star(self, nodes, goal_cell):
-        if nodes is None:
-            raise RuntimeError("_a_star: nodes is None")
-        if len(nodes) == 0:
-            raise RuntimeError("_a_star: nodes is empty (no grid nodes built)")
-
+        if not nodes:
+            return None
+            
         node_by_cell = {n.cell: n for n in nodes}
-
         
+        # 1. Znajdź start
         my_pos = self.dynamic_info.get("position", {"x": 0.0, "y": 0.0})
-        sx = float(my_pos.get("x", 0.0))
-        sy = float(my_pos.get("y", 0.0))
-
+        sx, sy = float(my_pos.get("x", 0.0)), float(my_pos.get("y", 0.0))
+        
         start_cell = None
-        best_d2 = 1e18
+        best_dist = float('inf')
+        
         for cell, node in node_by_cell.items():
             wx, wy = node.world
-            d2 = (wx - sx) * (wx - sx) + (wy - sy) * (wy - sy)
-            if d2 < best_d2:
-                best_d2 = d2
+            d2 = (wx-sx)**2 + (wy-sy)**2
+            if d2 < best_dist:
+                best_dist = d2
                 start_cell = cell
+                
+        if start_cell is None:
+            return None
 
-        def Heuristic_Cost(cell):
-            return abs(cell[0] - goal_cell[0]) + abs(cell[1] - goal_cell[1])
+        # Funkcja heurystyki
+        def heuristic(c):
+            return abs(c[0] - goal_cell[0]) + abs(c[1] - goal_cell[1])
 
-        list_of_possible_paths = [{
-            "Path": [start_cell],
-            "Path_Cost": 0,
-            "Heuristic": Heuristic_Cost(start_cell),
-        }]
+        # 2. Kolejka priorytetowa: (f_score, g_score, path_list)
+        # f_score = g_score + h_score
+        start_h = heuristic(start_cell)
+        queue = [(start_h, 0.0, [start_cell])]
+        
+        # Słownik najlepszych kosztów dotarcia do pola (g_score)
+        g_scores = {start_cell: 0.0}
+        
+        # Cache dla szumu (żeby nie generować w pętli)
+        noise_map = {cell: random.uniform(0.0, 0.5) for cell in node_by_cell}
 
-        best_paths = {start_cell: 0}
-
-        while list_of_possible_paths:
-
-            list_of_possible_paths.sort(
-                key=lambda p: p["Path_Cost"] + p["Heuristic"]
-            )
-
-            current_best_path = list_of_possible_paths.pop(0)
-
-            current_node = current_best_path["Path"][-1]
-            current_path_length = current_best_path["Path_Cost"]
+        while queue:
+            # heapq.heappop jest O(1) - wyciąga element o najniższym f_score
+            f, current_g, path = heapq.heappop(queue)
+            current_node = path[-1]
 
             if current_node == goal_cell:
-                return current_best_path["Path"]
+                return path
+            
+            # Jeśli znaleźliśmy już szybszą drogę do tego węzła w międzyczasie -> skip
+            if current_g > g_scores.get(current_node, float('inf')):
+                continue
 
+            # Sprawdzanie sąsiadów
             for neighbour in node_by_cell[current_node].neighbors:
-
-                next_path_length = current_path_length + 1
-
-                if neighbour in best_paths and next_path_length >= best_paths[neighbour]:
-                    continue
-
-                best_paths[neighbour] = next_path_length
-
-                new_path = current_best_path["Path"] + [neighbour]
-
-                list_of_possible_paths.append({
-                    "Path": new_path,
-                    "Path_Cost": next_path_length,
-                    "Heuristic": Heuristic_Cost(neighbour),
-                })
+                neighbor_node = node_by_cell[neighbour]
                 
+                # --- Logika Kosztów ---
+                
+                # Soft Block dla ścian (umożliwia ucieczkę z inflacji)
+                obst_penalty = 100000.0 if neighbor_node.blocked else 0.0
+                
+                # Teren i obrażenia
+                speed_loss = max(0.0, 1.0 - neighbor_node.speed)
+                move_cost = BASE_MOVE_COST + (speed_loss * SLOW_TERRAIN_PENALTY_WEIGHT)
+                move_cost += float(neighbor_node.dmg) * DMG_PENALTY
+                move_cost += noise_map.get(neighbour, 0.0)
+                move_cost += obst_penalty
+                
+                if neighbor_node.is_risk:
+                    move_cost += DANGEROUS_NEIGHBOUR_PENALTY
+
+                # Straight Line Penalty
+                if len(path) >= 2:
+                    prev = path[-2]
+                    curr = current_node
+                    nxt = neighbour
+                    if (curr[0]-prev[0], curr[1]-prev[1]) == (nxt[0]-curr[0], nxt[1]-curr[1]):
+                        move_cost += STRAIGHT_PENALTY
+
+                new_g = current_g + move_cost
+
+                # Relaksacja krawędzi
+                if new_g < g_scores.get(neighbour, float('inf')):
+                    g_scores[neighbour] = new_g
+                    new_f = new_g + heuristic(neighbour)
+                    heapq.heappush(queue, (new_f, new_g, path + [neighbour]))
+                    
         return None
     
     
@@ -689,7 +811,7 @@ class RandomAgent:
         if not nodes:
             return None, None, None, None
 
-        targets = self._select_target_point(nodes)  # lista komórek
+        targets = self._select_target_point(nodes, current_target=self.current_goal_cell)
         if not targets:
             return None, None, None, None
 
@@ -706,7 +828,8 @@ class RandomAgent:
         my_position = self.dynamic_info.get("position")
         my_x = float(my_position.get("x", 0.0))
         my_y = float(my_position.get("y", 0.0))
-
+        my_id = self.static_info.get("id")
+        
         if self.path_index < 0:
             self.path_index = 0
         if self.path_index >= len(self.path_to_follow) - 1:
@@ -717,7 +840,7 @@ class RandomAgent:
         dist = np.sqrt((next_x - my_x)**2 + (next_y - my_y)**2)
 
         # warunki "reached"
-        reach_threshold = self.TILE_SIZE / 10.0  
+        reach_threshold = self.CELL_SIZE * 1
         reached_by_distance = dist <= reach_threshold
         reached_by_timeout = self.path_stuck_ticks >= 100
 
@@ -751,7 +874,15 @@ class RandomAgent:
 
         # ruch zależny od tego jak bardzo jesteśmy odchyleni od kierunku
         
-        move_speed = top_speed
+        #########
+        #Zapogiega jechaniu bokiem (caly czas wczesniejj czolgi jezdzily bokiem jesli tylko cel sciezki nie byla bezposrednio przed nimi)
+        move_speed = 0.0
+        #Jeśli błąd kąta jest mniejszy niż 15 stopni, pozwala na jazde
+        if abs(err) < 5:
+            move_speed = top_speed
+        else:
+            #eśli kąt jest duży stoi w miejscu i tylko się obraca
+            move_speed = 0.0
 
         return heading_rotation_angle, move_speed
             
@@ -761,8 +892,8 @@ class RandomAgent:
         EVAL_EVERY = 50
         FORCE_REPLAN_EVERY = 1000
 
-        IMPROVEMENT_MARGIN = 0.10     
-        MIN_ABS_IMPROVEMENT = 2.0      
+        IMPROVEMENT_MARGIN = 0.2    
+        MIN_ABS_IMPROVEMENT = 10.0   
 
         def angle_diff(target_deg: float, current_deg: float) -> float:
             return (target_deg - current_deg + 180) % 360 - 180
@@ -771,7 +902,23 @@ class RandomAgent:
             return max(lo, min(hi, x))
 
         def should_force_replan() -> bool:
-            return (self.current_tick - self.last_forced_replan_tick) >= FORCE_REPLAN_EVERY
+            # 1. Czy minęło wystarczająco dużo czasu od ostatniego wymuszenia? (Cooldown)
+            # To zabezpiecza przed lagami, nawet jeśli czołg ciągle "stuckuje"
+            ticks_since_last = self.current_tick - self.last_forced_replan_tick
+            if ticks_since_last < 50:
+                return False
+
+            # 2. Standardowy okresowy replan
+            if ticks_since_last >= FORCE_REPLAN_EVERY:
+                return True
+
+            # 3. Panic Replan (tylko jeśli cooldown minął)
+            if self.path_stuck_ticks > 15:
+                # Opcjonalnie: Spróbujmy cofnąć czołg logicznie (reset stuck)
+                # print(f"[PANIC] Stuck detected at tick {self.current_tick}")
+                return True
+                
+            return False
 
         def should_eval() -> bool:
             return (self.current_tick - self.last_eval_tick) >= EVAL_EVERY
@@ -792,6 +939,13 @@ class RandomAgent:
                 return True
             if new_cost is None or new_cost == float("inf"):
                 return False
+                
+            # --- ADD THIS CHECK ---
+            # If both costs are 0 (common on flat maps), DO NOT switch.
+            if new_cost == 0 and old_cost == 0:
+                return False
+            # ----------------------
+    
             if new_cost <= old_cost * (1.0 - IMPROVEMENT_MARGIN):
                 return True
             if (old_cost - new_cost) >= MIN_ABS_IMPROVEMENT:

@@ -57,28 +57,30 @@ except ImportError as e:
 
 # --- Stałe Konfiguracyjne Grafiki ---
 LOG_LEVEL = "DEBUG"
-MAP_SEED = "road_trees.csv"
-TARGET_FPS = 60
-SCALE = 3  # Współczynnik skalowania grafiki (wszystko będzie 4x większe)
+#MAP_SEED = "road_trees.csv"
+MAP_SEED = "advanced_road_trees.csv"
+TARGET_FPS = 30
+SCALE = 3.5 # Współczynnik skalowania grafiki (wszystko będzie 4x większe)
 TILE_SIZE = 10  # To MUSI być zgodne z domyślną wartością w map_loader.py
 AGENT_NAME = "random_agent.py" # Nazwa pliku agenta
 
 AGENT_FILES = [
-    "random_agent.py",    
-    "random_agent.py",    
-    "random_agent.py",
-    "random_agent.py",
-    "random_agent.py",
     "random_agent_seba.py",
+    "Rusher_agent.py",
+    "Rusher_agent.py",
+    
+    "random_agent_seba.py",
+    "Rusher_agent.py",
+    "Rusher_agent.py",
 ]
 
 ARGUMENTS = [
-    None,
-    None,
-    None,
+    "2",
     None,
     None,
     "2",
+    None,
+    None
 
 ]
 

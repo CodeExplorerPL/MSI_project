@@ -42,7 +42,7 @@ import random
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union, cast
-
+from backend.structures import AmmoType
 import httpx
 
 from ..structures import MapInfo, Position, PowerUpData, PowerUpType
@@ -915,12 +915,22 @@ class GameLoop:
         actions_converted = {}
         for tank_id, action_dict in agent_actions.items():
             try:
+                # --- FIX START: Parse Ammo String to Enum ---
+                ammo_str = action_dict.get("ammo_to_load")
+                ammo_enum = None
+                if ammo_str:
+                    # Clean up string just in case (e.g. "AmmoType.HEAVY" -> "HEAVY")
+                    clean_str = str(ammo_str).replace("AmmoType.", "").upper()
+                    if clean_str in AmmoType.__members__:
+                        ammo_enum = AmmoType[clean_str]
+                # --- FIX END ---
+
                 actions_converted[tank_id] = ActionCommand(
-                    barrel_rotation_angle=action_dict.get("barrel_rotation_angle", 0.0),
-                    heading_rotation_angle=action_dict.get("heading_rotation_angle", 0.0),
-                    move_speed=action_dict.get("move_speed", 0.0),
-                    ammo_to_load=None,  # TODO: Parse ammo type
-                    should_fire=action_dict.get("should_fire", False)
+                    barrel_rotation_angle=float(action_dict.get("barrel_rotation_angle", 0.0)),
+                    heading_rotation_angle=float(action_dict.get("heading_rotation_angle", 0.0)),
+                    move_speed=float(action_dict.get("move_speed", 0.0)),
+                    ammo_to_load=ammo_enum,  # <--- CHANGED FROM None TO ammo_enum
+                    should_fire=bool(action_dict.get("should_fire", False))
                 )
             except Exception as e:
                 self.logger.warning(f"Failed to parse action for {tank_id}: {e}")

@@ -1,0 +1,797 @@
+{
+    "current_tick": 471,
+    "static_info": {
+        "id": "tank_2_1",
+        "team": 2,
+        "tank_type": "Sniper",
+        "vision_angle": 20.0,
+        "vision_range": 120.0,
+        "top_speed": 3.0,
+        "barrel_spin_rate": 30,
+        "heading_spin_rate": 2,
+        "max_hp": 40,
+        "max_shield": 30
+    },
+    "dynamic_info": {
+        "hp": 40,
+        "shield": 22.099999999999888,
+        "position": {
+            "x": 165.00002928854724,
+            "y": 36.72997083065534
+        },
+        "move_speed": 3.0,
+        "barrel_angle": 83.4494408809752,
+        "heading": 90.00073924607113,
+        "ammo": {
+            "HEAVY": {
+                "count": 0,
+                "_ammo_type": "HEAVY"
+            },
+            "LIGHT": {
+                "count": 5,
+                "_ammo_type": "LIGHT"
+            },
+            "LONG_DISTANCE": {
+                "count": 10,
+                "_ammo_type": "LONG_DISTANCE"
+            }
+        },
+        "ammo_loaded": "HEAVY",
+        "is_overcharged": false,
+        "size": "MISSING",
+        "reload_timer": 2.3499999999999215,
+        "enemies_remaining": 3,
+        "visible_tanks": [
+            {
+                "id": "tank_1_2",
+                "team": 1,
+                "tank_type": "Sniper",
+                "position": {
+                    "x": 50.70317466930152,
+                    "y": 53.58779415384038
+                },
+                "is_damaged": false,
+                "heading": -8.399966743489585,
+                "barrel_angle": 2.842170943040401e-14,
+                "distance": 115.53335961119072
+            },
+            {
+                "id": "tank_1_3",
+                "team": 1,
+                "tank_type": "Sniper",
+                "position": {
+                    "x": 71.07128984977263,
+                    "y": 47.175543932216144
+                },
+                "is_damaged": false,
+                "heading": -6.357693190174587,
+                "barrel_angle": 0.0,
+                "distance": 94.50776735262168
+            }
+        ],
+        "visible_enemies": [
+            {
+                "id": "tank_1_2",
+                "team": 1,
+                "tank_type": "Sniper",
+                "position": {
+                    "x": 50.70317466930152,
+                    "y": 53.58779415384038
+                },
+                "is_damaged": false,
+                "heading": -8.399966743489585,
+                "barrel_angle": 2.842170943040401e-14,
+                "distance": 115.53335961119072
+            },
+            {
+                "id": "tank_1_3",
+                "team": 1,
+                "tank_type": "Sniper",
+                "position": {
+                    "x": 71.07128984977263,
+                    "y": 47.175543932216144
+                },
+                "is_damaged": false,
+                "heading": -6.357693190174587,
+                "barrel_angle": 0.0,
+                "distance": 94.50776735262168
+            }
+        ],
+        "visible_obstacles": [
+            {
+                "id": "04bd0952-6d61-4fbb-a1f2-4cab2994a510",
+                "position": {
+                    "x": 65.0,
+                    "y": 35.0
+                },
+                "type": "TREE",
+                "is_destructible": true
+            },
+            {
+                "id": "f0915583-c361-4d55-9a75-850260a55a6e",
+                "position": {
+                    "x": 75.0,
+                    "y": 35.0
+                },
+                "type": "ANTI_TANK_SPIKE",
+                "is_destructible": false
+            },
+            {
+                "id": "a8819bdd-9ecd-47b7-ba9d-a974a2e280e9",
+                "position": {
+                    "x": 105.0,
+                    "y": 45.0
+                },
+                "type": "ANTI_TANK_SPIKE",
+                "is_destructible": false
+            },
+            {
+                "id": "763fd145-0c26-4400-bd12-497496354189",
+                "position": {
+                    "x": 115.0,
+                    "y": 45.0
+                },
+                "type": "ANTI_TANK_SPIKE",
+                "is_destructible": false
+            },
+            {
+                "id": "2266c128-ec46-43d2-9d8c-ada0d5827943",
+                "position": {
+                    "x": 125.0,
+                    "y": 45.0
+                },
+                "type": "ANTI_TANK_SPIKE",
+                "is_destructible": false
+            },
+            {
+                "id": "0240cc1c-6dbd-4a99-afaf-9a60c7503d55",
+                "position": {
+                    "x": 95.0,
+                    "y": 55.0
+                },
+                "type": "ANTI_TANK_SPIKE",
+                "is_destructible": false
+            }
+        ],
+        "visible_terrains": [
+            {
+                "position": {
+                    "x": 85.0,
+                    "y": 35.0
+                },
+                "type": "Water",
+                "speed_modifier": 0.7,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 95.0,
+                    "y": 35.0
+                },
+                "type": "Water",
+                "speed_modifier": 0.7,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 105.0,
+                    "y": 35.0
+                },
+                "type": "Water",
+                "speed_modifier": 0.7,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 115.0,
+                    "y": 35.0
+                },
+                "type": "Water",
+                "speed_modifier": 0.7,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 125.0,
+                    "y": 35.0
+                },
+                "type": "Water",
+                "speed_modifier": 0.7,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 135.0,
+                    "y": 35.0
+                },
+                "type": "PotholeRoad",
+                "speed_modifier": 0.95,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 55.0,
+                    "y": 45.0
+                },
+                "type": "PotholeRoad",
+                "speed_modifier": 0.95,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 65.0,
+                    "y": 45.0
+                },
+                "type": "Water",
+                "speed_modifier": 0.7,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 75.0,
+                    "y": 45.0
+                },
+                "type": "Water",
+                "speed_modifier": 0.7,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 85.0,
+                    "y": 45.0
+                },
+                "type": "Water",
+                "speed_modifier": 0.7,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 95.0,
+                    "y": 45.0
+                },
+                "type": "Water",
+                "speed_modifier": 0.7,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 135.0,
+                    "y": 45.0
+                },
+                "type": "Road",
+                "speed_modifier": 1.5,
+                "dmg": 0
+            },
+            {
+                "position": {
+                    "x": 55.0,
+                    "y": 55.0
+                },
+                "type": "Water",
+                "speed_modifier": 0.7,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 65.0,
+                    "y": 55.0
+                },
+                "type": "Water",
+                "speed_modifier": 0.7,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 75.0,
+                    "y": 55.0
+                },
+                "type": "Water",
+                "speed_modifier": 0.7,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 85.0,
+                    "y": 55.0
+                },
+                "type": "Water",
+                "speed_modifier": 0.7,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 55.0,
+                    "y": 65.0
+                },
+                "type": "Water",
+                "speed_modifier": 0.7,
+                "dmg": 1
+            },
+            {
+                "position": {
+                    "x": 65.0,
+                    "y": 65.0
+                },
+                "type": "Water",
+                "speed_modifier": 0.7,
+                "dmg": 1
+            }
+        ],
+        "visible_powerups": []
+    },
+    "meta_info": {
+        "closest_enemy_angle": 90.20491643604248,
+        "closest_enemy_dist": 94.50776735262168,
+        "target_id": "tank_1_3",
+        "is_aimed_at": true
+    },
+    "memory": {
+        "tank_1_3": {
+            "id": "tank_1_3",
+            "last_seen_pos": {
+                "x": 71.07128984977263,
+                "y": 47.175543932216144
+            },
+            "last_seen_tick": 471,
+            "tank_type": "Sniper",
+            "team": 1
+        },
+        "tank_1_2": {
+            "id": "tank_1_2",
+            "last_seen_pos": {
+                "x": 50.70317466930152,
+                "y": 53.58779415384038
+            },
+            "last_seen_tick": 471,
+            "tank_type": "Sniper",
+            "team": 1
+        }
+    },
+    "debug": {
+        "goal_cell": [
+            78,
+            76
+        ],
+        "path": [
+            [
+                82,
+                15
+            ],
+            [
+                82,
+                16
+            ],
+            [
+                82,
+                17
+            ],
+            [
+                82,
+                18
+            ],
+            [
+                82,
+                19
+            ],
+            [
+                82,
+                20
+            ],
+            [
+                82,
+                21
+            ],
+            [
+                82,
+                22
+            ],
+            [
+                83,
+                22
+            ],
+            [
+                83,
+                23
+            ],
+            [
+                84,
+                23
+            ],
+            [
+                84,
+                24
+            ],
+            [
+                85,
+                24
+            ],
+            [
+                85,
+                25
+            ],
+            [
+                86,
+                25
+            ],
+            [
+                86,
+                26
+            ],
+            [
+                86,
+                27
+            ],
+            [
+                86,
+                28
+            ],
+            [
+                86,
+                29
+            ],
+            [
+                86,
+                30
+            ],
+            [
+                86,
+                31
+            ],
+            [
+                86,
+                32
+            ],
+            [
+                86,
+                33
+            ],
+            [
+                87,
+                33
+            ],
+            [
+                87,
+                34
+            ],
+            [
+                88,
+                34
+            ],
+            [
+                89,
+                34
+            ],
+            [
+                90,
+                34
+            ],
+            [
+                90,
+                35
+            ],
+            [
+                91,
+                35
+            ],
+            [
+                91,
+                36
+            ],
+            [
+                91,
+                37
+            ],
+            [
+                91,
+                38
+            ],
+            [
+                91,
+                39
+            ],
+            [
+                91,
+                40
+            ],
+            [
+                91,
+                41
+            ],
+            [
+                91,
+                42
+            ],
+            [
+                91,
+                43
+            ],
+            [
+                91,
+                44
+            ],
+            [
+                91,
+                45
+            ],
+            [
+                92,
+                45
+            ],
+            [
+                92,
+                46
+            ],
+            [
+                93,
+                46
+            ],
+            [
+                93,
+                47
+            ],
+            [
+                94,
+                47
+            ],
+            [
+                94,
+                48
+            ],
+            [
+                94,
+                49
+            ],
+            [
+                94,
+                50
+            ],
+            [
+                94,
+                51
+            ],
+            [
+                94,
+                52
+            ],
+            [
+                94,
+                53
+            ],
+            [
+                94,
+                54
+            ],
+            [
+                94,
+                55
+            ],
+            [
+                94,
+                56
+            ],
+            [
+                94,
+                57
+            ],
+            [
+                94,
+                58
+            ],
+            [
+                93,
+                58
+            ],
+            [
+                93,
+                59
+            ],
+            [
+                92,
+                59
+            ],
+            [
+                92,
+                60
+            ],
+            [
+                92,
+                61
+            ],
+            [
+                92,
+                62
+            ],
+            [
+                92,
+                63
+            ],
+            [
+                92,
+                64
+            ],
+            [
+                92,
+                65
+            ],
+            [
+                92,
+                66
+            ],
+            [
+                92,
+                67
+            ],
+            [
+                92,
+                68
+            ],
+            [
+                92,
+                69
+            ],
+            [
+                91,
+                69
+            ],
+            [
+                91,
+                70
+            ],
+            [
+                90,
+                70
+            ],
+            [
+                90,
+                71
+            ],
+            [
+                89,
+                71
+            ],
+            [
+                88,
+                71
+            ],
+            [
+                87,
+                71
+            ],
+            [
+                86,
+                71
+            ],
+            [
+                86,
+                72
+            ],
+            [
+                85,
+                72
+            ],
+            [
+                85,
+                73
+            ],
+            [
+                85,
+                74
+            ],
+            [
+                85,
+                75
+            ],
+            [
+                84,
+                75
+            ],
+            [
+                84,
+                76
+            ],
+            [
+                83,
+                76
+            ],
+            [
+                82,
+                76
+            ],
+            [
+                81,
+                76
+            ],
+            [
+                80,
+                76
+            ],
+            [
+                79,
+                76
+            ],
+            [
+                78,
+                76
+            ]
+        ],
+        "path_index": 3,
+        "seen_terrain_tiles": [
+            [
+                8,
+                3
+            ],
+            [
+                9,
+                3
+            ],
+            [
+                10,
+                3
+            ],
+            [
+                11,
+                3
+            ],
+            [
+                12,
+                3
+            ],
+            [
+                13,
+                3
+            ],
+            [
+                5,
+                4
+            ],
+            [
+                6,
+                4
+            ],
+            [
+                7,
+                4
+            ],
+            [
+                8,
+                4
+            ],
+            [
+                9,
+                4
+            ],
+            [
+                13,
+                4
+            ],
+            [
+                5,
+                5
+            ],
+            [
+                6,
+                5
+            ],
+            [
+                7,
+                5
+            ],
+            [
+                8,
+                5
+            ],
+            [
+                5,
+                6
+            ],
+            [
+                6,
+                6
+            ]
+        ],
+        "my_pos": {
+            "x": 165.00002928854724,
+            "y": 36.72997083065534
+        }
+    }
+}

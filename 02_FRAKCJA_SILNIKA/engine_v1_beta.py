@@ -48,7 +48,9 @@ except ImportError as e:
 
 # --- Stałe Konfiguracyjne Grafiki ---
 LOG_LEVEL = "DEBUG"
-MAP_SEED = "advanced_road_trees.csv"
+MAP_SEED = "symmetric.csv"
+TEAM_A_SPAWN_POINTS = [(15, 15), (15, 60), (15, 95), (15, 165), (15, 195)]  # Współrzędne (x, y)
+TEAM_B_SPAWN_POINTS = [(185, 15), (185, 60), (185, 95), (185, 165), (185, 195)] # Współrzędne (x, y) na Grass dla drużyny B
 TARGET_FPS = 60
 SCALE = 5  # Współczynnik skalowania grafiki (wszystko będzie 4x większe)
 TILE_SIZE = 10  # To MUSI być zgodne z domyślną wartością w map_loader.py
@@ -551,7 +553,13 @@ def main():
         return
 
     # --- Inicjalizacja Gry ---
-    game_loop = GameLoop(headless=False)
+    game_loop = GameLoop(
+        headless=False,
+        spawn_points={
+            1: TEAM_A_SPAWN_POINTS,
+            2: TEAM_B_SPAWN_POINTS
+        }
+    )
 
     try:
         # 1. Uruchomienie serwerów agentów (teraz używamy random_agent.py)

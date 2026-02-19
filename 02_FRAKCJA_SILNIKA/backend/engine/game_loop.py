@@ -108,17 +108,19 @@ class TankScoreboard:
 class GameLoop:
     """Główna klasa pętli gry z fazami inicjalizacji, loop i końca."""
 
-    def __init__(self, config: Optional[GameConfig] = None, headless: bool = False):
+    def __init__(self, config: Optional[GameConfig] = None, headless: bool = False, spawn_points: Optional[Dict[int, List[tuple]]] = None):
         """
         Inicjalizacja GameLoop.
 
         Args:
             config: Konfiguracja gry (opcjonalna)
             headless: Czy uruchomić w trybie bez interfejsu graficznego
+            spawn_points: Opcjonalne punkty spawnów dla drużyn {team_id: [(x,y), ...]}
         """
         self.game_core = GameCore(config) if config else create_default_game()
         self.logger = get_logger()
         self.headless = headless
+        self.spawn_points = spawn_points
 
         # Engine components
         self.map_loader = MapLoader()
@@ -504,6 +506,13 @@ class GameLoop:
         Returns:
             Spawn position (clear of obstacles)
         """
+        # Sprawdź czy zdefiniowano własne punkty spawnu
+        if self.spawn_points and team in self.spawn_points:
+            points = self.spawn_points[team]
+            if index < len(points):
+                coords = points[index]
+                return Position(float(coords[0]), float(coords[1]))
+
         if not self.map_info or not self.map_info.size:
             self.logger.warning("MapInfo not available for spawn, using default config size.")
             map_width = self.game_core.config.map_config.width

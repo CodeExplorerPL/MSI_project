@@ -66,9 +66,15 @@ TEAM_COLORS = {
     1: (50, 150, 255),  # Niebieski
     2: (255, 50, 50)    # Czerwony
 }
-TOURNAMENT = False
+TOURNAMENT = True
 AGENT_TEAM_1_FILE = "agent1.py"
 AGENT_TEAM_2_FILE = "agent2.py"
+# "agent1.py", "agent2.py", "agent3.py", "agent4.py", "agent5.py",
+# "agent6.py", "agent7.py", "agent8.py", "agent9.py", "agent10.py"
+CUSTOM_AGENT_LIST = [
+    "agent1.py", "agent2.py", "agent3.py", "agent4.py", "agent5.py",
+    "agent6.py", "agent7.py", "agent8.py", "agent9.py", "agent10.py"
+]
 
 TANK_ASSET_MAP = {
     "LIGHT": "light_tank",
@@ -595,11 +601,23 @@ def main():
 
         else:
             print(f"Uruchamianie {total_tanks} serwerów agentów...")
+            use_custom_list = (len(CUSTOM_AGENT_LIST) == total_tanks)
+            if use_custom_list:
+                print(
+                    "Wykryto poprawną listę CUSTOM_AGENT_LIST. "
+                    "Używam zdefiniowanych plików.")
+            else:
+                print(
+                    "Brak lub nieprawidłowa liczba agentów w CUSTOM_AGENT_LIST."
+                    "Używam domyślnych nazw (agent1.py - agent10.py).")
             for i in range(total_tanks):
                 port = AGENT_BASE_PORT + i
                 name = f"Bot_{i + 1}"
 
-                agent_file_name = f"agent{i + 1}.py"
+                if use_custom_list:
+                    agent_file_name = CUSTOM_AGENT_LIST[i]
+                else:
+                    agent_file_name = f"agent{i + 1}.py"
                 agent_script_path = os.path.join(agents_dir_path, agent_file_name)
 
                 if not os.path.exists(agent_script_path):

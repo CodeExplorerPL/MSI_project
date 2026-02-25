@@ -49,8 +49,8 @@ except ImportError as e:
 # --- Stałe Konfiguracyjne Grafiki ---
 LOG_LEVEL = "DEBUG"
 MAP_SEED = "symmetric.csv"
-TEAM_A_SPAWN_POINTS = [(15, 15), (15, 60), (15, 95), (15, 165), (15, 195)]  # Współrzędne (x, y)
-TEAM_B_SPAWN_POINTS = [(185, 15), (185, 60), (185, 95), (185, 165), (185, 195)] # Współrzędne (x, y) na Grass dla drużyny B
+TEAM_A_SPAWN_POINTS = [(15, 15), (15, 70), (15, 95), (15, 165), (15, 195)]  # Współrzędne (x, y)
+TEAM_B_SPAWN_POINTS = [(185, 15), (185, 70), (185, 95), (185, 165), (185, 195)] # Współrzędne (x, y) na Grass dla drużyny B
 TARGET_FPS = 60
 SCALE = 5  # Współczynnik skalowania grafiki (wszystko będzie 4x większe)
 TILE_SIZE = 10  # To MUSI być zgodne z domyślną wartością w map_loader.py
@@ -66,9 +66,9 @@ TEAM_COLORS = {
     1: (50, 150, 255),  # Niebieski
     2: (255, 50, 50)    # Czerwony
 }
-TOURNAMENT = True
-AGENT_TEAM_1_FILE = "agent1.py"
-AGENT_TEAM_2_FILE = "agent2.py"
+TOURNAMENT = False
+AGENT_TEAM_1_FILE = "agent10.py"
+AGENT_TEAM_2_FILE = "agent10.py"
 # "agent1.py", "agent2.py", "agent3.py", "agent4.py", "agent5.py",
 # "agent6.py", "agent7.py", "agent8.py", "agent9.py", "agent10.py"
 CUSTOM_AGENT_LIST = [
@@ -636,8 +636,8 @@ def main():
                 print(
                     f"  -> Agent '{name}' (Team {team_nbr}) uruchomiony z pliku '{agent_file_name}' na porcie {port} (PID: {proc.pid})")
 
-        print("\nOczekiwanie 3 sekundy na start serwerów agentów...")
-        time.sleep(3)
+        print("\nOczekiwanie 10 sekund na start serwerów agentów...")
+        time.sleep(10)
 
         # 2. Inicjalizacja silnika gry
         if not game_loop.initialize_game(map_seed=MAP_SEED):

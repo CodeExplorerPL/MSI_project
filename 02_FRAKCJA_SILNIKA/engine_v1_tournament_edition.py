@@ -757,7 +757,7 @@ def main():
             # Ta jedna metoda załatwia wszystko: zapytania do agentów, fizykę, zgony.
             tick_info = game_loop._process_game_tick()
             current_tick = tick_info["tick"]
-            if current_tick >= 50 and current_tick % 10 == 0:
+            if current_tick >= 3000 and current_tick % 50 == 0:
                 for tank in game_loop.tanks.values():
                     if tank.is_alive():
                         # Zadajemy 1 pkt obrażeń bezpośrednio

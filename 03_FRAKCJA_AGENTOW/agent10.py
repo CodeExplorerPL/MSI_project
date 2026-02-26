@@ -24,6 +24,8 @@ import os
 import random
 import sys
 import threading
+import time
+import traceback
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -154,6 +156,8 @@ class Observation:
     shield_ratio: float
     can_fire: bool
     reload_norm: float
+    vision_range: float = 40.0
+    ammo_range: float = 50.0
 
 
 class StateEncoder:
@@ -284,7 +288,6 @@ class StateEncoder:
         barrel_abs: float,
         seen_obstacles: List[Dict[str, Any]],
         target_distance: float,
-        # TODO: use loaded-ammo range from my_status instead of one shared default.
         max_range: float = 25.0,
         half_angle: float = 5.0,
     ) -> bool:
@@ -308,7 +311,7 @@ class StateEncoder:
         sensor_data: Dict[str, Any],
         enemies_remaining: int,
         enemy_target_pos: Optional[Tuple[float, float]] = None,
-    ) -> Observation:
+    ) -> Tuple[Observation, bool]:
         my_pos = my_status.get("position", {"x": 0.0, "y": 0.0})
         my_team = my_status.get("_team")
 
@@ -374,7 +377,6 @@ class StateEncoder:
                 barrel_abs,
                 seen_obstacles,
                 target_distance=enemy_distance_raw,
-                # TODO: pass runtime ammo-dependent range here.
                 max_range=25.0,
                 half_angle=5.0,
             )
@@ -430,6 +432,12 @@ class StateEncoder:
         enemies_remaining_norm = self._clamp(float(enemies_remaining) / 5.0, 0.0, 1.0)
         can_fire = self._can_fire(my_status, reload_timer)
 
+        _AMMO_RANGES = {"HEAVY": 25.0, "LIGHT": 50.0, "LONG_DISTANCE": 100.0}
+        obs_vision_range = float(my_status.get("_vision_range", 40.0) or 40.0)
+        ammo_loaded = str(my_status.get("ammo_loaded") or "LIGHT").upper()
+        obs_ammo_range = _AMMO_RANGES.get(ammo_loaded, 50.0) / vision_range
+        is_at_range = obs_ammo_range > enemy_dist
+
         vector = np.array(
             [
                 hp_ratio,
@@ -469,14 +477,14 @@ class StateEncoder:
             shield_ratio=shield_ratio,
             can_fire=can_fire,
             reload_norm=reload_norm,
-        )
+        ), is_at_range
 
 
 @dataclass
 class AgentConfig:
     state_dim: int = STATE_DIM
-    n_rules: int = 4 * STATE_DIM
-    mf_type: str = "triangular"
+    n_rules: int = 32
+    mf_type: str = "gaussian"
 
     gamma: float = 0.9
     actor_lr: float = 1e-5
@@ -506,13 +514,16 @@ class FuzzyDQNAgent:
     def __init__(self, name: str, config: AgentConfig, training_enabled: bool, load_checkpoint: bool = True):
         self.name = name
         self.config = config
+        self.config.model_path = self._normalize_optional_path(self.config.model_path)
+        self.config.best_model_path = self._normalize_optional_path(self.config.best_model_path)
         self.training_enabled = training_enabled
         self.map_name = str(config.map_name or "")
-
+        self.checkpoints: list
+    
         random.seed(config.seed)
         np.random.seed(config.seed)
         torch.manual_seed(config.seed)
-
+        
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.encoder = StateEncoder()
 
@@ -565,17 +576,21 @@ class FuzzyDQNAgent:
         self.was_destroyed = False
         self.best_score = float("-inf")
         self.last_status: Optional[Dict[str, Any]] = None
+        self.checkpoint_loaded = False
+        self.checkpoint_error: Optional[str] = None
 
         self.lock = threading.Lock()
 
         self.best_model_path = self._resolve_best_model_path()
         if load_checkpoint:
-            self._load_checkpoint_if_available()
+            self.checkpoint_loaded = self._load_checkpoint_if_available()
         print(
             f"[{self.name}] ready | training={self.training_enabled} "
             f"device={self.device} rules={self.config.n_rules} mf={self.config.mf_type} "
-            f"save_path={self.config.model_path}"
+            f"save_path={self.config.model_path} checkpoint_loaded={self.checkpoint_loaded}"
         )
+        if self.checkpoint_error:
+            print(f"[{self.name}] checkpoint_error={self.checkpoint_error}")
 
         self.trace_positions: List[Tuple[float, float]] = []
         self.trace_hp: List[float] = []
@@ -600,9 +615,16 @@ class FuzzyDQNAgent:
         self.frontier_min_y: Optional[float] = None
         self.frontier_max_y: Optional[float] = None
         self.reward_parts_history: Dict[str, List[float]] = {}
-        self.enemy_target_pos: Optional[Tuple[float, float]] = None
+        self.target: Optional[Tuple[float, float]] = None
+        self.last_dangerous_terrain_pos: Optional[Tuple[float, float]] = None
         self.last_min_corner = None
         self.last_max_corner = None
+
+    @staticmethod
+    def _normalize_optional_path(path: Optional[str]) -> Optional[str]:
+        if not path:
+            return None
+        return os.path.abspath(os.path.expanduser(path))
 
     def _init_comet(self) -> None:
         try:
@@ -704,6 +726,56 @@ class FuzzyDQNAgent:
         dy = target["y"] - source["y"]
         return math.degrees(math.atan2(dy, dx))
 
+    # def _dangerous_terrain_angle_error(
+    #     self,
+    #     my_status: Dict[str, Any],
+    #     sensor_data: Dict[str, Any],
+    # ) -> Optional[float]:
+    #     my_pos = my_status.get("position", {"x": 0.0, "y": 0.0})
+    #     my_heading = float(my_status.get("heading", 0.0) or 0.0)
+    #     seen_terrains = sensor_data.get("seen_terrains", [])
+
+    #     dangerous_terrains = []
+    #     for terrain in seen_terrains:
+    #         pos = terrain.get("position")
+    #         if not pos:
+    #             continue
+    #         dmg = float(terrain.get("dmg", 0.0) or 0.0)
+    #         if dmg > 0.0:
+    #             dangerous_terrains.append(terrain)
+
+    #     visible_angle_errors: List[float] = []
+    #     if dangerous_terrains:
+    #         nearest = min(
+    #             dangerous_terrains,
+    #             key=lambda terrain: self.encoder._distance(
+    #                 my_pos,
+    #                 terrain.get("position", {"x": 0.0, "y": 0.0}),
+    #             ),
+    #         )
+    #         nearest_pos = nearest.get("position", {"x": 0.0, "y": 0.0})
+    #         tx = float(nearest_pos.get("x", 0.0) or 0.0)
+    #         ty = float(nearest_pos.get("y", 0.0) or 0.0)
+    #         self.last_dangerous_terrain_pos = (tx, ty)
+
+    #         for terrain in dangerous_terrains:
+    #             terrain_pos = terrain.get("position", {"x": 0.0, "y": 0.0})
+    #             terrain_angle = self.angle_to(my_pos, terrain_pos)
+    #             visible_angle_errors.append(abs(self.normalize_angle(terrain_angle - my_heading)))
+
+    #     memory_angle_error: Optional[float] = None
+    #     if self.last_dangerous_terrain_pos is not None:
+    #         tx, ty = self.last_dangerous_terrain_pos
+    #         memory_pos = {"x": tx, "y": ty}
+    #         memory_angle = self.angle_to(my_pos, memory_pos)
+    #         memory_angle_error = abs(self.normalize_angle(memory_angle - my_heading))
+
+    #     if visible_angle_errors and memory_angle_error is not None:
+    #         return min(min(visible_angle_errors), memory_angle_error)
+    #     if visible_angle_errors:
+    #         return min(visible_angle_errors)
+    #     return memory_angle_error
+
     def _find_nearest_enemy_agent2(
         self,
         my_status: Dict[str, Any],
@@ -775,7 +847,7 @@ class FuzzyDQNAgent:
         return False
 
     def _fuzzy_shoot_decision(self, barrel_error: float, distance: float) -> bool:
-        abs_error = abs(barrel_error)
+        abs_error = abs(barrel_error) 
         mu_error_small = max(0.0, 1.0 - (abs_error / 3.0))
         if abs_error < 6.0:
             mu_error_medium = max(0.0, (abs_error - 2.0) / 4.0)
@@ -805,10 +877,10 @@ class FuzzyDQNAgent:
             if current and counts.get(current, 0) > 0:
                 return current
             return max(counts.items(), key=lambda item: item[1])[0] if counts else None
-        if target.distance > 25.0:
+        if target.distance > 50.0:
             preferred = ["LONG_DISTANCE", "LIGHT", "HEAVY"]
-        elif target.distance > 15.0:
-            preferred = ["LIGHT", "LONG_DISTANCE", "HEAVY"]
+        elif target.distance > 25.0:
+            preferred = ["LIGHT", "HEAVY", "LONG_DISTANCE"]
         else:
             preferred = ["HEAVY", "LIGHT", "LONG_DISTANCE"]
         for ammo_name in preferred:
@@ -826,6 +898,7 @@ class FuzzyDQNAgent:
         obs: Observation,
         sensor_data: Dict[str, Any],
         current_tick: int,
+        is_in_shooting_range: bool = True
     ) -> ActionCommand:
         move_speed = float(action_vec[0])
         heading_rotation = float(action_vec[1])
@@ -847,6 +920,7 @@ class FuzzyDQNAgent:
                 self._fuzzy_shoot_decision(target.barrel_error, target.distance)
                 and not self._ally_in_fire_line_agent2(my_status, sensor_data)
                 and reload_timer <= 0.0
+                # and is_in_shooting_range
             ):
                 should_fire = True
             
@@ -875,6 +949,8 @@ class FuzzyDQNAgent:
         enemies_remaining: int,
         current_tick: int,
         current_pos: Tuple[float, float],
+        is_enemy_at_ammo_range: bool,
+        dangerous_terrain_angle_error: Optional[float] = None,
     ) -> float:
         from collections import defaultdict
         parts: Dict[str, float] = defaultdict(float)
@@ -922,18 +998,28 @@ class FuzzyDQNAgent:
             # move_speed: float = 0.0
             # should_fire: bool = False
 
+        if not is_enemy_at_ammo_range or not current_obs.enemy_visible:
+            parts["approaching_enemy"] = (0.5 - current_obs.vector[15]) * 40 * abs(current_obs.enemy_hull_error - 0.5)
+        else:
+            print(f'No strzela! {is_enemy_at_ammo_range=}, {current_obs.enemy_visible=}')
+
         hp_delta = current_obs.hp_ratio - prev_obs.hp_ratio
-
-        # Reward closing distance to visible enemy.
-        parts["approaching_enemy"] = (0.5 - current_obs.vector[15]) * 100 * abs(current_obs.enemy_hull_error - 0.5)
-
-        if not current_obs.enemy_visible and np.isclose(hp_delta, 0.0):
-            move = action.move_speed
-            parts["retreating"] = move / 5 if move < 0.0 else 0.0
         if not np.isclose(hp_delta, 0.0):
-            parts["hp_loss"] = hp_delta * 2.5
-        if not prev_obs.danger_ahead and current_obs.danger_ahead:
-            parts["danger_ahead"] = -0.3
+            parts["hp_loss"] = hp_delta * 5_000 # moze byc spokojnie powyzej 1.
+        if current_obs.danger_ahead: # jak sie nie nauczy to zostanie sie przy tym
+            parts["danger_ahead"] = -100
+        # if dangerous_terrain_angle_error is not None and current_obs.danger_ahead:
+        #     parts["danger_alignment"] = -100 * dangerous_terrain_angle_error
+        
+        if current_obs.obstacle_ahead:
+            parts["obstacle_nearby"] = -7.5
+        if prev_obs.obstacle_ahead and current_obs.obstacle_ahead:
+            parts["obstacle_sustained"] = -10.0
+
+        if not current_obs.enemy_visible:
+            speed_norm = abs(action.move_speed) / MAX_MOVE_SPEED
+            if speed_norm < 0.2:
+                parts["idle_penalty"] = -0.4 * (1.0 - speed_norm / 0.2)
 
         delta = action.heading_rotation_angle / MAX_HEADING_DELTA
         parts["rotation"] = -0.75 * (delta) ** 2
@@ -956,38 +1042,6 @@ class FuzzyDQNAgent:
         parts["variance_recent"] = var_r / 5
         parts["variance_prev"] = var_p / 5
         parts["centroid_bonus"] = parts["variance_recent"] + parts["variance_prev"]
-
-        frontier_bonus = 0.0
-        if self.frontier_min_x is None:
-            self.frontier_min_x = current_pos[0]
-            self.frontier_max_x = current_pos[0]
-            self.frontier_min_y = current_pos[1]
-            self.frontier_max_y = current_pos[1]
-        else:                                       # wyjezdza w nieznane
-            if current_pos[0] < self.frontier_min_x:
-                frontier_bonus += (self.frontier_min_x - current_pos[0]) / MAP_WIDTH
-                self.frontier_min_x = current_pos[0]
-            if current_pos[0] > self.frontier_max_x:
-                frontier_bonus += (current_pos[0] - self.frontier_max_x) / MAP_WIDTH
-                self.frontier_max_x = current_pos[0]
-            if current_pos[1] < self.frontier_min_y:
-                frontier_bonus += (self.frontier_min_y - current_pos[1]) / MAP_HEIGHT
-                self.frontier_min_y = current_pos[1]
-            if current_pos[1] > self.frontier_max_y:
-                frontier_bonus += (current_pos[1] - self.frontier_max_y) / MAP_HEIGHT
-                self.frontier_max_y = current_pos[1]
-        parts["frontier_bonus"] = frontier_bonus
-
-        corners = [(0.0, 0.0), (MAP_WIDTH, 0.0), (0.0, MAP_HEIGHT), (MAP_WIDTH, MAP_HEIGHT)]
-        corner_dist_list = [math.hypot(current_pos[0] - cx, current_pos[1] - cy) for cx, cy in corners]
-        min_dist = min(corner_dist_list)
-        max_dist = max(corner_dist_list)
-        if self.last_min_corner is None and self.last_max_corner is None:
-            self.last_min_corner = min_dist
-            self.last_max_corner = max_dist
-            parts['corner_penalty'] = -1
-        elif self.last_min_corner is not None and self.last_max_corner is not None:
-            parts['corner_penalty'] = (self.last_min_corner + self.last_max_corner - max_dist - min_dist) / 2
 
         reward = sum(parts.values())
         self.episode_reward_total += reward
@@ -1030,7 +1084,7 @@ class FuzzyDQNAgent:
         actor_action = torch.tanh(actor_raw)
         actor_action = self._scale_action_tensor(actor_action)
         actor_action = torch.sigmoid(actor_action)
-        raw_penalty = 5e-2 * actor_raw.pow(2).mean()
+        raw_penalty = 6e-2 * actor_raw.pow(2).mean()
         actor_loss = -self.critic(torch.cat([states, actor_action], dim=1)).mean() + raw_penalty
 
         self.actor_optimizer.zero_grad(set_to_none=True)
@@ -1098,44 +1152,115 @@ class FuzzyDQNAgent:
         torch.save(self._checkpoint_payload(), save_path)
         print(f"[{self.name}] {label} saved: {save_path}")
 
-    def _load_checkpoint_if_available(self) -> None:
+    def _load_checkpoint_if_available(self) -> bool:
         path = self.config.model_path
-        if not path or not os.path.exists(path):
-            return
+        primary_path = path
+        used_fallback = False
+        if not path:
+            self.checkpoint_error = "empty model path"
+            print(f"[{self.name}] ERROR: checkpoint path is empty")
+            return False
+
+        print(
+            f"[{self.name}] checkpoint probe: pid={os.getpid()} cwd={os.getcwd()} path={path}",
+            flush=True,
+        )
+        for _ in range(3):
+            if os.path.isfile(path):
+                break
+            time.sleep(0.2)
+        if not os.path.isfile(path):
+            fallback_path = self.best_model_path or self._resolve_best_model_path()
+            fallback_path = self._normalize_optional_path(fallback_path)
+            if fallback_path and os.path.isfile(fallback_path):
+                used_fallback = True
+                self.checkpoint_error = (
+                    f"primary checkpoint missing: {primary_path} "
+                    f"(fallback used: {fallback_path})"
+                )
+                print(
+                    f"[{self.name}] ERROR: primary checkpoint missing: {primary_path} "
+                    f"| using fallback: {fallback_path}",
+                    flush=True,
+                )
+                path = fallback_path
+                self.config.model_path = fallback_path
+
+        if not os.path.isfile(path):
+            parent_dir = os.path.dirname(path) or "."
+            parent_exists = os.path.isdir(parent_dir)
+            nearby_pt_files: List[str] = []
+            if parent_exists:
+                try:
+                    nearby_pt_files = sorted(
+                        [fname for fname in os.listdir(parent_dir) if fname.endswith(".pt")]
+                    )[:20]
+                except Exception as list_exc:
+                    nearby_pt_files = [f"<listdir failed: {list_exc}>"]
+            self.checkpoint_error = f"checkpoint not found: {path}"
+            print(
+                f"[{self.name}] ERROR: checkpoint not found after retries: {path} "
+                f"| parent_exists={parent_exists} nearby_pt={nearby_pt_files}",
+                flush=True,
+            )
+            return False
 
         try:
             checkpoint = torch.load(path, map_location=self.device, weights_only=False)
-            if isinstance(checkpoint, dict) and "actor_state_dict" in checkpoint:
-                saved_conf = checkpoint.get("config", {})
-                if saved_conf:
-                    if saved_conf.get("n_rules") != self.config.n_rules:
-                        print(f"[{self.name}] WARNING: Rules count mismatch! Saved: {saved_conf.get('n_rules')}, Current: {self.config.n_rules}")
-                    if saved_conf.get("mf_type") != self.config.mf_type:
-                        print(f"[{self.name}] WARNING: MF type mismatch! Saved: {saved_conf.get('mf_type')}, Current: {self.config.mf_type}")
+            if not (isinstance(checkpoint, dict) and "actor_state_dict" in checkpoint):
+                self.checkpoint_error = f"unsupported checkpoint format: {path}"
+                print(f"[{self.name}] ERROR: checkpoint format not recognized: {path}")
+                return False
 
-                self.actor.load_state_dict(checkpoint["actor_state_dict"], strict=True)
-                self.critic.load_state_dict(checkpoint["critic_state_dict"], strict=True)
+            saved_conf = checkpoint.get("config", {})
+            if saved_conf:
+                if saved_conf.get("n_rules") != self.config.n_rules:
+                    print(
+                        f"[{self.name}] WARNING: Rules count mismatch! "
+                        f"Saved: {saved_conf.get('n_rules')}, Current: {self.config.n_rules}"
+                    )
+                if saved_conf.get("mf_type") != self.config.mf_type:
+                    print(
+                        f"[{self.name}] WARNING: MF type mismatch! "
+                        f"Saved: {saved_conf.get('mf_type')}, Current: {self.config.mf_type}"
+                    )
 
-                self.actor_target.load_state_dict(checkpoint.get("actor_target_state_dict", checkpoint["actor_state_dict"]), strict=True)
-                self.critic_target.load_state_dict(checkpoint.get("critic_target_state_dict", checkpoint["critic_state_dict"]), strict=True)
+            self.actor.load_state_dict(checkpoint["actor_state_dict"], strict=True)
+            self.critic.load_state_dict(checkpoint["critic_state_dict"], strict=True)
 
-                actor_opt = checkpoint.get("actor_optimizer_state_dict")
-                critic_opt = checkpoint.get("critic_optimizer_state_dict")
-                if actor_opt:
-                    self.actor_optimizer.load_state_dict(actor_opt)
-                if critic_opt:
-                    self.critic_optimizer.load_state_dict(critic_opt)
+            self.actor_target.load_state_dict(
+                checkpoint.get("actor_target_state_dict", checkpoint["actor_state_dict"]),
+                strict=True,
+            )
+            self.critic_target.load_state_dict(
+                checkpoint.get("critic_target_state_dict", checkpoint["critic_state_dict"]),
+                strict=True,
+            )
 
-                self.total_steps = int(checkpoint.get("total_steps", 0) or 0)
-                self.train_steps = int(checkpoint.get("train_steps", 0) or 0)
-                self.games_played = int(checkpoint.get("games_played", 0) or 0)
-                self.best_score = float(checkpoint.get("best_score", float("-inf")))
-            else:
-                print(f"[{self.name}] checkpoint format not recognized; starting fresh.")
+            actor_opt = checkpoint.get("actor_optimizer_state_dict")
+            critic_opt = checkpoint.get("critic_optimizer_state_dict")
+            if actor_opt:
+                self.actor_optimizer.load_state_dict(actor_opt)
+            if critic_opt:
+                self.critic_optimizer.load_state_dict(critic_opt)
 
-            print(f"[{self.name}] checkpoint loaded: {path}")
+            self.total_steps = int(checkpoint.get("total_steps", 0) or 0)
+            self.train_steps = int(checkpoint.get("train_steps", 0) or 0)
+            self.games_played = int(checkpoint.get("games_played", 0) or 0)
+            self.best_score = float(checkpoint.get("best_score", float("-inf")))
+            if not used_fallback:
+                self.checkpoint_error = None
+            print(
+                f"[{self.name}] checkpoint loaded: {path} "
+                f"| total_steps={self.total_steps} games={self.games_played}",
+                flush=True,
+            )
+            return True
         except Exception as exc:
-            print(f"[{self.name}] failed to load checkpoint {path}: {exc}")
+            self.checkpoint_error = str(exc)
+            print(f"[{self.name}] ERROR: failed to load checkpoint {path}: {exc}", flush=True)
+            print(traceback.format_exc(), flush=True)
+            return False
 
     def _reset_episode_state(self) -> None:
         self.last_observation = None
@@ -1162,11 +1287,8 @@ class FuzzyDQNAgent:
         self.episode_reward_total = 0.0
         self.episode_reward_parts = {}
         self.episode_reward_parts_steps = 0
-        self.frontier_min_x = None
-        self.frontier_max_x = None
-        self.frontier_min_y = None
-        self.frontier_max_y = None
-        self.enemy_target_pos = None
+        self.target = None
+        self.last_dangerous_terrain_pos = None
 
     def _record_trace(
         self,
@@ -1223,7 +1345,6 @@ class FuzzyDQNAgent:
         if len(self.trace_positions) == 0:
             raise ValueError("Plotting: no trace positions")
 
-        import matplotlib.pyplot as plt
         from matplotlib.collections import LineCollection
 
         hps = self.trace_hp
@@ -1311,14 +1432,13 @@ class FuzzyDQNAgent:
             raise RuntimeError("Concurrent get_action call detected")
         try:
             pos = my_tank_status.get("position")
-            if not pos or "x" not in pos or "y" not in pos:
-                raise ValueError(f"Missing position in my_tank_status: {pos}")
             current_pos = (float(pos["x"]), float(pos["y"]))
             my_team = my_tank_status.get("_team")
-            if self.enemy_target_pos is None and my_team in (1, 2):
-                self.enemy_target_pos = (150.0, 25.0) if my_team == 1 else (40.0, 25.0)
-            if self.enemy_target_pos is None:
-                raise ValueError("enemy_target_pos is None; spawn point not initialized")
+            if self.target is None and my_team in (1, 2):
+                # self.checkpoints = [(40, 40), (150, 40)] if my_team == 1 else [(150, 40), (40, 40)] # dobra mamy checkpointy - jak ich nie bedzie to sobie znajdzie
+                self.checkpoints = [(MAP_WIDTH - pos["x"], pos["y"])]
+                self.target = self.checkpoints[0]
+            
             seen_tanks = sensor_data.get("seen_tanks", [])
             nearest_enemy = self.encoder._nearest_enemy(
                 {"y": current_pos[0], "x": current_pos[1]},
@@ -1329,13 +1449,32 @@ class FuzzyDQNAgent:
                 epos = nearest_enemy.get("position")
                 if not epos or "x" not in epos or "y" not in epos:
                     raise ValueError(f"Missing enemy position in nearest_enemy: {nearest_enemy}")
-                self.enemy_target_pos = (float(epos["x"]), float(epos["y"]))
-            current_obs = self.encoder.encode(
+                self.target = (float(epos["x"]), float(epos["y"]))
+            current_obs, is_enemy_at_ammo_range = self.encoder.encode(
                 my_tank_status,
                 sensor_data,
                 enemies_remaining,
-                enemy_target_pos=self.enemy_target_pos,
+                enemy_target_pos=self.target,
             )
+
+            if current_obs.enemy_visible and nearest_enemy is not None:
+                self.checkpoints.insert(0, self.target)
+                self.target = (float(epos.get("x", self.target[0])), float(epos.get("y", self.target[1])))
+            # elif current_obs.powerup_visible:
+            #     powerups = [
+            #         (float(p["position"]["x"]), float(p["position"]["y"]))
+            #         for p in sensor_data.get("seen_powerups", [])
+            #         if p.get("position") and "x" in p["position"] and "y" in p["position"]
+            #     ]
+            #     keep_current = any(math.hypot(self.target[0] - x, self.target[1] - y) <= 5.0 for x, y in powerups)
+            #     if (powerups and not keep_current) or current_obs.danger_ahead:
+            #         self.target = min(powerups, key=lambda q: math.hypot(current_pos[0] - q[0], current_pos[1] - q[1]))
+            elif np.hypot(current_pos[0] - self.target[0], current_pos[1] - self.target[1]) < 30 and not current_obs.enemy_visible: # dojechal do checkpointa
+                if len(self.checkpoints) > 0:
+                    self.target = self.checkpoints.pop()
+                else:
+                    self.target = (np.random.randint(int(MAP_WIDTH)), np.random.randint(int(MAP_HEIGHT)))
+
             damage_taken_value = self._safe_nonnegative_float(damage_taken, default=0.0)
             hit_target_value = self._safe_bool(hit_target, default=False)
             friendly_hit_value = self._safe_bool(friendly_hit, default=False)
@@ -1396,6 +1535,8 @@ class FuzzyDQNAgent:
                         enemies_remaining=enemies_remaining,
                         current_tick=current_tick,
                         current_pos=current_pos,
+                        is_enemy_at_ammo_range=is_enemy_at_ammo_range,
+                        # dangerous_terrain_angle_error=dangerous_terrain_angle_error,
                     )
                     self.current_episode_score += reward
                     self.replay.add(
@@ -1408,7 +1549,7 @@ class FuzzyDQNAgent:
                     self._maybe_train()
 
             action_vec = self._select_action(current_obs.vector, training=self.training_enabled)
-            command = self._to_command(action_vec, my_tank_status, current_obs, sensor_data, current_tick)
+            command = self._to_command(action_vec, my_tank_status, current_obs, sensor_data, current_tick, is_enemy_at_ammo_range)
 
             if command.should_fire:
                 self.last_fire_tick = current_tick
@@ -1537,7 +1678,6 @@ class FuzzyDQNAgent:
     def _save_reward_plot(self) -> None:
         if not self.reward_parts_history:
             return
-        import matplotlib.pyplot as plt
         fig, ax = plt.subplots(figsize=(10, 5))
         colors = list(plt.cm.tab20.colors)
         for idx, (label, ys) in enumerate(self.reward_parts_history.items()):
@@ -1735,6 +1875,7 @@ def _get_agent() -> FuzzyDQNAgent:
 
 @app.get("/")
 async def root() -> Dict[str, Any]:
+    print('Root communicating')
     return _get_agent().status()
 
 
@@ -1743,7 +1884,7 @@ async def get_action(payload: Dict[str, Any] = Body(...)) -> ActionCommand:
     damage_taken = FuzzyDQNAgent._safe_nonnegative_float(payload.get("damage_taken", 0.0), default=0.0)
     hit_target = FuzzyDQNAgent._safe_bool(payload.get("hit_target", False), default=False)
     friendly_hit = FuzzyDQNAgent._safe_bool(payload.get("friendly_hit", False), default=False)
-    return _get_agent().get_action(
+    result = _get_agent().get_action(
         current_tick=int(payload.get("current_tick", 0) or 0),
         my_tank_status=payload.get("my_tank_status", {}),
         sensor_data=payload.get("sensor_data", {}),
@@ -1752,10 +1893,17 @@ async def get_action(payload: Dict[str, Any] = Body(...)) -> ActionCommand:
         hit_target=hit_target,
         friendly_hit=friendly_hit,
     )
+    # print(f"[ACTION tick={payload.get('current_tick')}]\
+    #         move={result.move_speed:.3f}\
+    #         heading={result.heading_rotation_angle:.3f}\
+    #         fire={result.should_fire}", flush=True
+    #     )
+    return result
 
 
 @app.post("/agent/context")
 async def update_context(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    print(f'Context: {payload=}')
     map_name = str(payload.get("map_name", "") or "")
     agent_obj = _get_agent()
     with agent_obj.lock:
@@ -1765,11 +1913,13 @@ async def update_context(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
 
 @app.post("/agent/destroy", status_code=204, response_model=None)
 async def destroy(payload: Dict[str, Any] = Body(None)) -> None:
+    # print(f'Destroy: {destroy=}')
     _get_agent().destroy(payload)
 
 
 @app.post("/agent/end", status_code=204, response_model=None)
 async def end(payload: Dict[str, Any] = Body(...)) -> None:
+    # print(f'End: {payload=}')
     _get_agent().end(
         damage_dealt=float(payload.get("damage_dealt", 0.0) or 0.0),
         tanks_killed=int(payload.get("tanks_killed", 0) or 0),
@@ -1783,15 +1933,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--name", type=str, default=None)
     parser.add_argument("--train", action="store_true", help="Enable online learning")
 
-    parser.add_argument("--model-path", type=str, default='dependencyAgent10/fuzzy_dqn_model.pt')
-    parser.add_argument("--best-model-path", type=str, default='dependencyAgent10/fuzzy_dqn_model.pt')
+    parser.add_argument("--model-path", type=str, default=os.path.join(current_dir, 'dependencyAgent10/fuzzy_dqn_model_best.pt'))
+    parser.add_argument("--best-model-path", type=str, default=os.path.join(current_dir, 'dependencyAgent10/fuzzy_dqn_model_best.pt'))
     parser.add_argument("--rules", type=int, default=32)
     parser.add_argument("--mf-type", choices=["gaussian", "bell", "triangular"], default="gaussian")
     parser.add_argument("--frame-skip", type=int, default=1)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--save-every-games", type=int, default=1)
-    parser.add_argument("--mock-barrel-model-path", type=str, default="dependencyAgent10/anfis_barrel_model.pt")
-    parser.add_argument("--mock-shoot-model-path", type=str, default="dependencyAgent10/anfis_shoot_model.pt")
     parser.add_argument("--warmup-steps", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--train-every", type=int, default=2)
@@ -1810,44 +1958,52 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    import traceback as _traceback
+    print("[AGENT STARTUP] Agent10.py __main__ reached", flush=True)
+    try:
+        args = parse_args()
+        print(f"[AGENT STARTUP] args parsed: port={args.port} name={args.name}", flush=True)
 
-    config = AgentConfig(
-        n_rules=max(4, int(args.rules)),
-        mf_type=args.mf_type,
-        frame_skip=max(1, int(args.frame_skip)),
-        model_path=args.model_path,
-        best_model_path=args.best_model_path,
-        mock_barrel_model_path=args.mock_barrel_model_path,
-        mock_shoot_model_path=args.mock_shoot_model_path,
-        seed=int(args.seed),
-        save_every_games=max(1, int(args.save_every_games)),
-        warmup_steps=max(0, int(args.warmup_steps)),
-        batch_size=max(16, int(args.batch_size)),
-        train_every=max(1, int(args.train_every)),
-        target_sync_every=max(1, int(args.target_sync_every)),
-        gamma=float(args.gamma),
-        actor_lr=float(args.actor_lr),
-        critic_lr=float(args.critic_lr),
-        tau=float(args.tau),
-        action_noise_start=float(args.action_noise_start),
-        action_noise_end=float(args.action_noise_end),
-        action_noise_decay_steps=max(1, int(args.action_noise_decay_steps)),
-        map_name=str(args.map_name or ""),
-    )
+        config = AgentConfig(
+            n_rules=max(4, int(args.rules)),
+            mf_type=args.mf_type,
+            frame_skip=max(1, int(args.frame_skip)),
+            model_path=args.model_path,
+            best_model_path=args.best_model_path,
+            seed=int(args.seed),
+            save_every_games=max(1, int(args.save_every_games)),
+            warmup_steps=max(0, int(args.warmup_steps)),
+            batch_size=max(16, int(args.batch_size)),
+            train_every=max(1, int(args.train_every)),
+            target_sync_every=max(1, int(args.target_sync_every)),
+            gamma=float(args.gamma),
+            actor_lr=float(args.actor_lr),
+            critic_lr=float(args.critic_lr),
+            tau=float(args.tau),
+            action_noise_start=float(args.action_noise_start),
+            action_noise_end=float(args.action_noise_end),
+            action_noise_decay_steps=max(1, int(args.action_noise_decay_steps)),
+            map_name=str(args.map_name or ""),
+        )
 
-    agent_name = args.name or f"FuzzyDQN_{args.port}"
+        agent_name = args.name or f"FuzzyDQN_{args.port}"
+        print(f"[AGENT STARTUP] Creating FuzzyDQNAgent: {agent_name}", flush=True)
 
-    # Replace default global agent with runtime configuration.
-    agent = FuzzyDQNAgent(
-        name=agent_name,
-        config=config,
-        training_enabled=bool(args.train),
-        load_checkpoint=not bool(args.no_load),
-    )
+        # Replace default global agent with runtime configuration.
+        agent = FuzzyDQNAgent(
+            name=agent_name,
+            config=config,
+            training_enabled=bool(args.train),
+            load_checkpoint=not bool(args.no_load),
+        )
 
-    print(
-        f"Starting {agent_name} on {args.host}:{args.port} "
-        f"| train={args.train} | model={config.model_path}"
-    )
-    uvicorn.run(app, host=args.host, port=args.port, access_log=False)
+        print(
+            f"[AGENT STARTUP] Starting {agent_name} on {args.host}:{args.port} "
+            f"| train={args.train} | model={config.model_path}",
+            flush=True,
+        )
+        uvicorn.run(app, host=args.host, port=args.port, access_log=False)
+    except Exception as _e:
+        print(f"[AGENT STARTUP ERROR] {_e}", flush=True)
+        _traceback.print_exc()
+        raise

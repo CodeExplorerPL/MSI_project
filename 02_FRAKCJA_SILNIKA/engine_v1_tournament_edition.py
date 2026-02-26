@@ -49,8 +49,14 @@ except ImportError as e:
 # --- Stałe Konfiguracyjne Grafiki ---
 LOG_LEVEL = "DEBUG"
 MAP_SEED = "symmetric.csv"
-TEAM_A_SPAWN_POINTS = [(15, 15), (15, 70), (15, 95), (15, 165), (15, 195)]  # Współrzędne (x, y)
-TEAM_B_SPAWN_POINTS = [(185, 15), (185, 70), (185, 95), (185, 165), (185, 195)] # Współrzędne (x, y) na Grass dla drużyny B
+# Far to side
+# TEAM_A_SPAWN_POINTS = [(15, 15), (15, 70), (15, 95), (15, 165), (15, 195)]  # Współrzędne (x, y)
+# TEAM_B_SPAWN_POINTS = [(185, 15), (185, 70), (185, 95), (185, 165), (185, 195)] # Współrzędne (x, y) na Grass dla drużyny B
+
+# Close battle
+TEAM_A_SPAWN_POINTS = [(60, 15), (60, 30), (60, 45), (60, 60), (60, 75)]  # Współrzędne (x, y)
+TEAM_B_SPAWN_POINTS = [(140, 15), (140, 30), (140, 45), (140, 60), (140, 75)] # Współrzędne (x, y) na Grass dla drużyny B
+
 TARGET_FPS = 60
 SCALE = 5  # Współczynnik skalowania grafiki (wszystko będzie 4x większe)
 TILE_SIZE = 10  # To MUSI być zgodne z domyślną wartością w map_loader.py
@@ -69,6 +75,7 @@ TEAM_COLORS = {
 TOURNAMENT = False
 AGENT_TEAM_1_FILE = "agent10.py"
 AGENT_TEAM_2_FILE = "agent10.py"
+# BOT AI - random_agent.py
 # "agent1.py", "agent2.py", "agent3.py", "agent4.py", "agent5.py",
 # "agent6.py", "agent7.py", "agent8.py", "agent9.py", "agent10.py"
 CUSTOM_AGENT_LIST = [
@@ -750,6 +757,18 @@ def main():
             # Ta jedna metoda załatwia wszystko: zapytania do agentów, fizykę, zgony.
             tick_info = game_loop._process_game_tick()
             current_tick = tick_info["tick"]
+            if current_tick >= 50 and current_tick % 10 == 0:
+                for tank in game_loop.tanks.values():
+                    if tank.is_alive():
+                        # Zadajemy 1 pkt obrażeń bezpośrednio
+                        print(f'Tank id: {tank.id} HP: {tank.hp} DMG TAKEN: 1')
+                        tank.take_damage(1)
+
+                        # Sprawdzamy czy czołg właśnie zginął, aby dodać info do wyników
+                        if not tank.is_alive():
+                            print(
+                                f"  [SUDDEN DEATH] Czołg {tank._id} uległ zniszczeniu przez upływ czasu.")
+
 
             # --- KROK 3: Przetwarzanie wyników fizyki dla celów wizualnych ---
             physics_results = game_loop.last_physics_results

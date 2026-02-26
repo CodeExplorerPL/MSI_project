@@ -208,11 +208,14 @@ class ANFISDQN(nn.Module):
 
         # Post-fuzzy nonlinear head to increase model capacity.
         self.head_fc1 = nn.Linear(n_actions, head_hidden_dim)
-        self.head_fc2 = nn.Linear(head_hidden_dim, n_actions)
+        self.head_fc2 = nn.Linear(head_hidden_dim, head_hidden_dim)
+        self.head_fc3 = nn.Linear(head_hidden_dim, n_actions)
         nn.init.xavier_uniform_(self.head_fc1.weight)
         nn.init.zeros_(self.head_fc1.bias)
         nn.init.xavier_uniform_(self.head_fc2.weight)
         nn.init.zeros_(self.head_fc2.bias)
+        nn.init.xavier_uniform_(self.head_fc3.weight)
+        nn.init.zeros_(self.head_fc3.bias)
 
     def _rule_strengths(self, x: torch.Tensor) -> torch.Tensor:
         # log_mu: [batch, rules, inputs]
@@ -240,7 +243,7 @@ class ANFISDQN(nn.Module):
         advantages = torch.einsum("br,bra->ba", strengths, adv_outputs)  # [B, A]
         q_values = state_value + (advantages - advantages.mean(dim=1, keepdim=True))
         q_values = q_values * self.output_scale
-        q_values = self.head_fc2(F.relu(self.head_fc1(q_values)))
+        q_values = self.head_fc3(F.relu(self.head_fc2(F.relu(self.head_fc1(q_values)))))
         return q_values
 
     def firing_strengths(self, x: torch.Tensor) -> torch.Tensor:

@@ -17,7 +17,7 @@ from typing import Dict, List
 # modułów z `backend`, niezależnie od miejsca uruchomienia skryptu.
 try:
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    # Zakładamy, że ten skrypt jest w '02_FRAKCJA_SILNIKA', a 'backend' jest w tym samym katalogu.
+    # Zakładamy, że ten skrypt jest w 'FRAKCJA_SILNIKA', a 'backend' jest w tym samym katalogu.
     # Dodajemy ten katalog do ścieżki.
     if current_dir not in sys.path:
         sys.path.insert(0, current_dir)
@@ -31,7 +31,7 @@ try:
 
 except ImportError as e:
     print(f"Błąd importu: {e}")
-    print("Upewnij się, że skrypt jest uruchamiany z katalogu '02_FRAKCJA_SILNIKA' lub że struktura projektu jest poprawna.")
+    print("Upewnij się, że skrypt jest uruchamiany z katalogu 'FRAKCJA_SILNIKA' lub że struktura projektu jest poprawna.")
     sys.exit(1)
 
 

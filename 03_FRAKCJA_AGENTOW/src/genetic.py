@@ -10,20 +10,9 @@ class GeneLine:
         else:
             self.line = values
     def mutate(self) -> None:
-        if len(self) == 0:
-            return
-
-        # Keep mutations local: perturb a small subset instead of random full resets.
-        max_fraction = 0.02 if len(self) < 500 else 0.005
-        max_mutations = max(1, int(len(self) * max_fraction))
-        n_mutations = np.random.randint(1, max_mutations + 1)
-        span = float(self.range[1] - self.range[0])
-        sigma = 0.10 * span
-
-        for _ in range(n_mutations):
-            idx = np.random.randint(0, len(self))
-            mutated = float(self.line[idx]) + float(np.random.normal(0.0, sigma))
-            self.line[idx] = float(np.clip(mutated, self.range[0], self.range[1]))
+        for _ in range( np.random.randint(0, len(self)//3) ):
+            idx = np.random.randint( 0, len(self)-1 )
+            self.line[idx] = np.random.uniform(*self.range)
 
     def crossover(self, parent: 'GeneLine') -> tuple['GeneLine', 'GeneLine']:
         cut_point = np.random.randint(1, len(self)-1)
@@ -125,31 +114,10 @@ class ANFIS_Specimen:
         for var in inputs_definition:
             n_rules *= var.n_functions
         n_tsk = n_rules * (n_inputs + 1)
-
-        # Seed premise genes around configured fuzzy inputs with jitter.
-        base_mid = []
-        base_top = []
-        base_side = []
-        for variable in inputs_definition:
-            center, kernel, fuzzy_left, fuzzy_right = variable.get()
-            base_mid.append(float(np.clip(center, 0.0, 1.0)))
-            base_top.append(float(np.clip(kernel, 0.05, 1.0)))
-            base_side.extend(
-                [
-                    float(np.clip(fuzzy_left, 0.02, 1.0)),
-                    float(np.clip(fuzzy_right, 0.02, 1.0)),
-                ]
-            )
-
-        def jitter(values: list[float], sigma: float, low: float, high: float) -> list[float]:
-            arr = np.array(values, dtype=float)
-            arr = arr + np.random.normal(0.0, sigma, len(arr))
-            return np.clip(arr, low, high).tolist()
-
         return cls([
-            GeneLine((0.0, 1.0), n_inputs, "mid", values=jitter(base_mid, sigma=0.10, low=0.0, high=1.0)),
-            GeneLine((0.0, 1.0), n_inputs, "top", values=jitter(base_top, sigma=0.08, low=0.05, high=1.0)),
-            GeneLine((0.0, 1.0), n_inputs * 2, "side", values=jitter(base_side, sigma=0.08, low=0.02, high=1.0)),
+            GeneLine((0.0, 1.0), n_inputs, "mid"),
+            GeneLine((0.0, 1.0), n_inputs, "top"),
+            GeneLine((0.0, 1.0), n_inputs * 2, "side"),
             GeneLine((0.0, 1.0), n_rules, "op"),
             GeneLine((-1.0, 1.0), n_tsk, "tsk")
         ])

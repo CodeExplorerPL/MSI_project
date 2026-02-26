@@ -23,10 +23,10 @@ import os
 
 # Add paths for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
-controller_dir = os.path.join(os.path.dirname(current_dir), '02_FRAKCJA_SILNIKA', 'controller')
+controller_dir = os.path.join(os.path.dirname(current_dir), 'FRAKCJA_SILNIKA', 'controller')
 sys.path.insert(0, controller_dir)
 
-parent_dir = os.path.join(os.path.dirname(current_dir), '02_FRAKCJA_SILNIKA')
+parent_dir = os.path.join(os.path.dirname(current_dir), 'FRAKCJA_SILNIKA')
 sys.path.insert(0, parent_dir)
 
 from typing import Dict, Any

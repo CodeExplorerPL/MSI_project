@@ -1,181 +1,61 @@
-"""
-Random Walking and Shooting Agent for Testing
-Agent losowo chodzący i strzelający do testów
-
-This agent implements IAgentController and performs random actions:
-- Random barrel and heading rotation
-- Random movement speed
-- Random shooting
-
-Usage:
-    python random_agent.py --port 8001
-    
-To run multiple agents:
-    python random_agent.py --port 8001  # Tank 1
-    python random_agent.py --port 8002  # Tank 2
-    ...
-"""
-
-import random
 import argparse
 import sys
 import os
+import logging
 
 # Add paths for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
-controller_dir = os.path.join(os.path.dirname(current_dir), '02_FRAKCJA_SILNIKA', 'controller')
+controller_dir = os.path.join(os.path.dirname(current_dir), 'FRAKCJA_SILNIKA', 'controller')
 sys.path.insert(0, controller_dir)
 
-parent_dir = os.path.join(os.path.dirname(current_dir), '02_FRAKCJA_SILNIKA')
+parent_dir = os.path.join(os.path.dirname(current_dir), 'FRAKCJA_SILNIKA')
 sys.path.insert(0, parent_dir)
 
 from typing import Dict, Any
 from fastapi import FastAPI, Body
-from pydantic import BaseModel
+
 import uvicorn
 
-
-# ============================================================================
-# ACTION COMMAND MODEL
-# ============================================================================
-
-class ActionCommand(BaseModel):
-    """Output action from agent to engine."""
-    barrel_rotation_angle: float = 0.0
-    heading_rotation_angle: float = 0.0
-    move_speed: float = 0.0
-    ammo_to_load: str = None
-    should_fire: bool = False
-
-
-# ============================================================================
-# RANDOM AGENT LOGIC
-# ============================================================================
-
-class RandomAgent:
-    """
-    Agent with more structured, stateful behavior for testing purposes.
-    Drives in one direction for a while, then changes.
-    Scans with its turret.
-    """
-    
-    def __init__(self, name: str = "TestBot"):
-        self.name = name
-        self.is_destroyed = False
-        print(f"[{self.name}] Agent initialized")
-
-        # State for movement
-        self.move_timer = 0
-        self.current_move_speed = 0.0
-
-        # State for hull rotation
-        self.heading_timer = 0
-        self.current_heading_rotation = 0.0
-
-        # State for barrel scanning
-        self.barrel_scan_direction = 1.0  # 1.0 for right, -1.0 for left
-        self.barrel_rotation_speed = 15.0
-
-        # State for aiming before shooting
-        self.aim_timer = 0  # Ticks to wait before firing
-    
-    def get_action(
-        self, 
-        current_tick: int, 
-        my_tank_status: Dict[str, Any], 
-        sensor_data: Dict[str, Any], 
-        enemies_remaining: int
-    ) -> ActionCommand:
-        """Generate a stateful, predictable action for testing."""
-        should_fire = False
-        heading_rotation = 0.0
-        barrel_rotation = 0.0
-        
-        if self.aim_timer > 0:
-            # --- AIMING PHASE ---
-            self.aim_timer -= 1
-            
-            # Stop all rotation while aiming
-            heading_rotation = 0.0
-            barrel_rotation = 0.0
-            
-            # Fire on the last tick of aiming
-            if self.aim_timer == 0:
-                should_fire = True
-        else:
-            # --- NORMAL OPERATION PHASE ---
-
-            # --- Hull Rotation Logic ---
-            self.heading_timer -= 1
-            if self.heading_timer <= 0:
-                self.current_heading_rotation = random.choice([-15.0, 0, 15.0])
-                self.heading_timer = random.randint(30, 90)
-            heading_rotation = self.current_heading_rotation
-
-            # --- Barrel Scanning Logic ---
-            barrel_angle = my_tank_status.get("barrel_angle", 0.0)
-            if barrel_angle > 45.0:
-                self.barrel_scan_direction = -1.0  # Scan left
-            elif barrel_angle < -45.0:
-                self.barrel_scan_direction = 1.0  # Scan right
-            barrel_rotation = self.barrel_rotation_speed * self.barrel_scan_direction
-
-            # --- Shooting Decision ---
-            # Decide if we should start aiming
-            wants_to_shoot = random.random() < 0.3
-            if wants_to_shoot:
-                self.aim_timer = 10  # Start aiming for 10 ticks
-
-        # --- Movement Logic (independent of aiming) ---
-        self.move_timer -= 1
-        if self.move_timer <= 0:
-            self.current_move_speed = random.choice([30.0, 30.0, 0.0, -10.0])
-            self.move_timer = random.randint(1, 10)
-            
-        ammo_data = my_tank_status.get("ammo", {})
-        best_ammo_type = None
-
-        if ammo_data:
-            # Znajduje klucz (nazwę amunicji), który ma największą wartość w polu 'count'
-            best_ammo_type = max(ammo_data,
-                                 key=lambda k: ammo_data[k].get("count", 0))
-        return ActionCommand(
-            barrel_rotation_angle=barrel_rotation,
-            heading_rotation_angle=heading_rotation,
-            move_speed=self.current_move_speed,
-            ammo_to_load=best_ammo_type,
-            should_fire=should_fire
-        )
-    
-    def destroy(self):
-        """Called when tank is destroyed."""
-        self.is_destroyed = True
-        print(f"[{self.name}] Tank destroyed!")
-    
-    def end(self, damage_dealt: float, tanks_killed: int):
-        """Called when game ends."""
-        print(f"[{self.name}] Game ended!")
-        print(f"[{self.name}] Damage dealt: {damage_dealt}")
-        print(f"[{self.name}] Tanks killed: {tanks_killed}")
-
+from src.agent import Agent007, ActionCommand
+from src.genetic import ANFIS_Specimen
 
 # ============================================================================
 # FASTAPI SERVER
 # ============================================================================
 
+
+def configure_logging(level: str = "INFO", log_file: str = None) -> None:
+    handlers = [logging.StreamHandler(sys.stdout)]
+    if log_file:
+        log_dir = os.path.dirname(log_file)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
+
+    logging.basicConfig(
+        level=getattr(logging, level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+
+
+logger = logging.getLogger("agent007.server")
+
 app = FastAPI(
-    title="Random Test Agent",
-    description="Random walking and shooting agent for testing",
+    title="Agent 007",
+    description="Her Majesty's Suspicious Agent",
     version="1.0.0"
 )
 
 # Global agent instance
-agent = RandomAgent()
+agent = Agent007(name="Agent 007")
 
 
 @app.get("/")
 async def root():
-    return {"message": f"Agent {agent.name} is running", "destroyed": agent.is_destroyed}
+    logger.debug("Health check called")
+    return {"message": f"{agent.name} is running", "destroyed": agent.is_destroyed}
 
 
 @app.post("/agent/action", response_model=ActionCommand)
@@ -193,12 +73,18 @@ async def get_action(payload: Dict[str, Any] = Body(...)):
 @app.post("/agent/destroy", status_code=204)
 async def destroy():
     """Called when the tank is destroyed."""
+    logger.info("Received /agent/destroy")
     agent.destroy()
 
 
 @app.post("/agent/end", status_code=204)
 async def end(payload: Dict[str, Any] = Body(...)):
     """Called when the game ends."""
+    logger.info(
+        "Received /agent/end damage_dealt=%s tanks_killed=%s",
+        payload.get('damage_dealt', 0.0),
+        payload.get('tanks_killed', 0),
+    )
     agent.end(
         damage_dealt=payload.get('damage_dealt', 0.0),
         tanks_killed=payload.get('tanks_killed', 0)
@@ -210,16 +96,60 @@ async def end(payload: Dict[str, Any] = Body(...)):
 # ============================================================================
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run random test agent")
+    parser = argparse.ArgumentParser(description="Run Agent 007")
     parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address")
     parser.add_argument("--port", type=int, default=8001, help="Port number")
     parser.add_argument("--name", type=str, default=None, help="Agent name")
+    parser.add_argument("--genes", type=str, default=None, help="Path to genes JSON file")
+    parser.add_argument("--train", action="store_true", help="Enable Training")
+    parser.add_argument(
+        "--log-level",
+        type=str,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Logging level",
+    )
+    parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Optional path to write logs to file",
+    )
+    parser.add_argument(
+        "--log-actions",
+        action="store_true",
+        help="Log action decision for every tick",
+    )
     args = parser.parse_args()
+
+    configure_logging(args.log_level, args.log_file)
     
     if args.name:
         agent.name = args.name
     else:
-        agent.name = f"RandomBot_{args.port}"
+        agent.name = f"Agent007_{args.port}"
     
-    print(f"Starting {agent.name} on {args.host}:{args.port}")
-    uvicorn.run(app, host=args.host, port=args.port)
+    default_genes_path = os.path.join(current_dir, "genes_007.json")
+    genes_path = args.genes
+    if genes_path is None and os.path.isfile(default_genes_path):
+        genes_path = default_genes_path
+
+    if genes_path:
+        specimen = ANFIS_Specimen.load_from_file(genes_path)
+        agent.load_specimen(specimen)
+
+    if args.train:
+        agent.set_training_mode(True)
+    
+    agent.log_actions = args.log_actions
+
+    logger.info(
+        "Starting %s on %s:%s train=%s log_file=%s log_actions=%s",
+        agent.name,
+        args.host,
+        args.port,
+        args.train,
+        args.log_file,
+        args.log_actions,
+    )
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")

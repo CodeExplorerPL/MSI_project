@@ -1,0 +1,64 @@
+﻿{
+  "map": {
+    "width": 200.0,
+    "height": 200.0,
+    "cell_size": 10.0,
+    "obstacle_memory_ttl": 1200,
+    "terrain_memory_ttl": 900,
+    "obstacle_default_size": 9.0,
+    "terrain_patch_size": 10.0,
+    "obstacle_size_by_type": {
+      "WALL": 10.0,
+      "TREE": 8.0,
+      "ANTITANKSPIKE": 8.0
+    }
+  },
+  "control": {
+    "move_speed_scale": 1.0,
+    "max_heading_delta_deg_by_type": {
+      "LIGHT": 5.0,
+      "HEAVY": 4.0,
+      "SNIPER": 5.0
+    },
+    "max_barrel_delta_deg_by_type": {
+      "LIGHT": 4.0,
+      "HEAVY": 3.5,
+      "SNIPER": 5.0
+    },
+    "speed_slew_per_tick_by_type": {
+      "LIGHT": 1.2,
+      "HEAVY": 0.4,
+      "SNIPER": 0.8
+    },
+    "heading_slew_deg_per_tick": 2.2,
+    "barrel_slew_deg_per_tick": 2.0,
+    "fire_stabilize_aim_error_deg": 7.0
+  },
+  "motion": {
+    "move_levels": [-0.3, 0.0, 0.18, 0.32, 0.48, 0.72, 0.92],
+    "turn_levels": [-1.0, -0.75, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75, 1.0],
+    "forward_bias": 0.1
+  },
+  "weapon": {
+    "sweep_speed": 0.12,
+    "enemy_memory_ttl": 14,
+    "force_fire_aim_deg": 3.0,
+    "fire_score_threshold": 0.24
+  },
+  "turret_nn": {
+    "enabled": true,
+    "checkpoint": "turret_aim_only.pt",
+    "tank_type": "ANY",
+    "device": "auto",
+    "seed": 42,
+    "epsilon": 0.0,
+    "scan_action": 0.35,
+    "scan_flip_ticks": 120,
+    "close_distance": 22.0,
+    "close_track_error_deg": 2.0,
+    "close_track_action": 0.35,
+    "fire_error_deg": 4.8,
+    "fire_conf_threshold": 0.48,
+    "enable_fire": true
+  }
+}

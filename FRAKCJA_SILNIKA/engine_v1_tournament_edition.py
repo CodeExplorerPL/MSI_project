@@ -43,7 +43,7 @@ try:
 
 except ImportError as e:
     print(f"Błąd importu: {e}")
-    print("Upewnij się, że skrypt jest uruchamiany z katalogu '02_FRAKCJA_SILNIKA' lub że struktura projektu jest poprawna.")
+    print("Upewnij się, że skrypt jest uruchamiany z katalogu 'FRAKCJA_SILNIKA' lub że struktura projektu jest poprawna.")
     sys.exit(1)
 
 # --- Stałe Konfiguracyjne Grafiki ---
@@ -72,12 +72,17 @@ TEAM_COLORS = {
     1: (50, 150, 255),  # Niebieski
     2: (255, 50, 50)    # Czerwony
 }
-TOURNAMENT = False
-AGENT_TEAM_1_FILE = "agent10.py"
-AGENT_TEAM_2_FILE = "agent10.py"
+
+# placeholder_to_search
+TOURNAMENT = True
+AGENT_TEAM_1_FILE = "agent8.py"
+AGENT_TEAM_2_FILE = "agent6.py"
 # BOT AI - random_agent.py
 # "agent1.py", "agent2.py", "agent3.py", "agent4.py", "agent5.py",
 # "agent6.py", "agent7.py", "agent8.py", "agent9.py", "agent10.py"
+
+
+
 CUSTOM_AGENT_LIST = [
     "agent1.py", "agent2.py", "agent3.py", "agent4.py", "agent5.py",
     "agent6.py", "agent7.py", "agent8.py", "agent9.py", "agent10.py"
@@ -757,7 +762,8 @@ def main():
             # Ta jedna metoda załatwia wszystko: zapytania do agentów, fizykę, zgony.
             tick_info = game_loop._process_game_tick()
             current_tick = tick_info["tick"]
-            if current_tick >= 3000 and current_tick % 50 == 0:
+            # placeholder_to_search
+            if current_tick >= 4000 and current_tick % 50 == 0:
                 for tank in game_loop.tanks.values():
                     if tank.is_alive():
                         # Zadajemy 1 pkt obrażeń bezpośrednio

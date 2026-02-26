@@ -24,7 +24,7 @@ try:
 
 except ImportError as e:
     print(f"Błąd importu: {e}")
-    print("Upewnij się, że skrypt jest uruchamiany z katalogu '02_FRAKCJA_SILNIKA' lub że struktura projektu jest poprawna.")
+    print("Upewnij się, że skrypt jest uruchamiany z katalogu 'FRAKCJA_SILNIKA' lub że struktura projektu jest poprawna.")
     sys.exit(1)
 
 # --- Konfiguracja Uruchomienia ---
